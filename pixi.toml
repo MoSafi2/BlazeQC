@@ -1,0 +1,22 @@
+[project]
+authors = ["MoSafi2 <mohamed.mabrouk@rwth-aachen.de>"]
+channels = ["conda-forge", "https://conda.modular.com/max-nightly/", "bioconda"]
+description = "Add a short description here"
+name = "BlazeSeq"
+platforms = ["linux-64"]
+version = "0.1.0"
+
+[tasks]
+
+[dependencies]
+max = "*"
+matplotlib = ">=3.9.4,<4"
+numpy = ">=1.26.4,<2"
+seaborn = ">=0.13.2,<0.14"
+fastqc = ">=0.12.1,<0.13"
+ipykernel = ">=6.29.5,<7"
+falco = ">=1.2.4,<2"
+fastp = ">=0.24.0,<0.25"
+
+[pypi-dependencies]
+pymodo = ">=0.10.1, <0.11"
