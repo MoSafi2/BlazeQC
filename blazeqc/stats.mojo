@@ -7,7 +7,6 @@ from collections.dict import DictEntry, Dict
 from utils import Index, StringSlice
 from memory import Span
 from python import Python, PythonObject
-from blazeseq.record import FastqRecord, RecordCoord
 from blazeqc.helpers import (
     cpy_tensor,
     QualitySchema,
@@ -38,6 +37,7 @@ from blazeqc.CONSTS import (
     generic_schema,
 )
 from blazeqc.config import hash_list, hash_names
+from blazeseq import FastqRecord, RecordCoord
 
 # TODO: Make this dynamic
 alias py_lib: String = ".pixi/envs/default/lib/python3.12/site-packages/"
@@ -580,7 +580,10 @@ struct DupReads(Analyser):
         Python.add_to_path(py_lib.as_string_slice())
         var plt = Python.import_module("matplotlib.pyplot")
         var arr = Tensor[DType.float64](total_percentages)
-        arr = (arr / Float64(total_reads)) * Float64(100)
+        var new_arr = Tensor[DType.float64](arr.num_elements())
+        for i in range(arr.num_elements()):
+            new_arr[i] = (arr[i] / Float64(total_reads)) * Float64(100)
+        arr = new_arr
         final_arr = tensor_to_numpy_1d(arr)
         f = plt.subplots(figsize=(10, 6))
         fig = f[0]

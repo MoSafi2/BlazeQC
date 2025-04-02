@@ -19,9 +19,10 @@ fn main() raises:
     while True:
         try:
             var record = parser.next()
-            stats.tally(record)
             n += 1
-        except:
+            stats.tally(record)
+        except Error:
+            print(Error)
             t1 = perf_counter_ns()
             stats.make_html(String(args[1]))
             t2 = perf_counter_ns()

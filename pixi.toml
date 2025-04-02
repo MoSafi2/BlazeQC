@@ -1,6 +1,6 @@
 [project]
 authors = ["MoSafi2 <mohamed.mabrouk@rwth-aachen.de>"]
-channels = ["conda-forge", "https://conda.modular.com/max-nightly/", "bioconda"]
+channels = ["conda-forge", "https://conda.modular.com/max/", "bioconda"]
 description = "Add a short description here"
 name = "BlazeSeq"
 platforms = ["linux-64"]
