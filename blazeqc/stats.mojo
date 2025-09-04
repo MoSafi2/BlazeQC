@@ -2,9 +2,8 @@
 
 # TODO: Check if you can convert large matrcies to a list of tensors and wether this will result in a better performance. Especially for for Quality Distribution, Tile
 
-from tensor import TensorShape, Tensor
 from collections.dict import DictEntry, Dict
-from utils import Index, StringSlice
+from utils import Index
 from memory import Span
 from python import Python, PythonObject
 from blazeqc.helpers import (
@@ -43,13 +42,13 @@ from blazeseq import FastqRecord, RecordCoord
 alias py_lib: String = ".pixi/envs/default/lib/python3.12/site-packages/"
 
 
-trait Analyser(CollectionElement):
+trait Analyser(Movable & Copyable):
     fn tally_read(mut self, record: FastqRecord):
         ...
 
 
 @value
-struct FullStats(CollectionElement):
+struct FullStats(Movable & Copyable):
     var num_reads: Int64
     var total_bases: Int64
     var bp_dist: BasepairDistribution

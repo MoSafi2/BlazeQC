@@ -4,13 +4,12 @@ from python import PythonObject, Python
 from utils import Variant
 
 
-trait HTMLMaker(CollectionElement):
+trait HTMLMaker(Copyable & Movable):
     fn html_output(self) -> String:
         ...
 
 
-@value
-struct result_panel:
+struct result_panel(Copyable & Movable):
     var name: String
     var grade: String
     var legand: String
@@ -34,7 +33,7 @@ struct result_panel:
 
 @always_inline
 fn _make_summary_insert(panel: result_panel) raises -> String:
-    return '<li><a class="{}" href="#{}">{}</a></li>'.format(
+    return String('<li><a class="{}" href="#{}">{}</a></li>').format(
         panel.grade, panel.name, panel.legand
     )
 
@@ -42,7 +41,7 @@ fn _make_summary_insert(panel: result_panel) raises -> String:
 @always_inline
 fn _make_module_insert(panel: result_panel) raises -> String:
     if panel.panel_type == "image":
-        return """
+        return String("""
                 <div class="module">
                     <h2 class="{0}" id="{1}">
                         {2}
@@ -52,11 +51,11 @@ fn _make_module_insert(panel: result_panel) raises -> String:
                     </div>
                 </div>
 
-                    """.format(
+                    """).format(
             panel.grade, panel.name, panel.legand, panel.html_output
         )
     elif panel.panel_type == "table":
-        return """
+        return String("""
                 <div class="module">
                     <h2 class="{0}" id="{1}">
                         {2}
@@ -66,7 +65,7 @@ fn _make_module_insert(panel: result_panel) raises -> String:
                     </div>
                 </div>
                  
-                    """.format(
+                    """).format(
             panel.grade, panel.name, panel.legand, panel.html_output
         )
 
@@ -146,7 +145,7 @@ alias table_template: String = """
 # Ported from FastQC: https://github.com/s-andrews/FastQC/blob/1faeea0412093224d7f6a07f777fad60a5650795/uk/ac/babraham/FastQC/Modules/BasicStats.java#L157
 fn format_length(original_length: Float64) -> String:
     length = original_length
-    unit = " bp"
+    unit: StringSlice[StaticConstantOrigin] = " bp"
 
     if length >= 1000000000:
         length /= 1000000000

@@ -17,16 +17,7 @@ fn hash_list() -> List[UInt64]:
 
 
 # TODO: Check how to unpack this variadic
-def hash_names() -> (
-    ListLiteral[
-        StringLiteral,
-        StringLiteral,
-        StringLiteral,
-        StringLiteral,
-        StringLiteral,
-        StringLiteral,
-    ]
-):
+def hash_names() -> List[StringSlice[StaticConstantOrigin]]:
     var names = [
         "Illumina Universal Adapter",
         "Illumina Small RNA 3' Adapter",
@@ -39,8 +30,12 @@ def hash_names() -> (
     return names
 
 
-def get_hashes() -> Dict[String, String]:
-    var hashes = Dict[String, String]()
+def get_hashes() -> (
+    Dict[StringSlice[StaticConstantOrigin], StringSlice[StaticConstantOrigin]]
+):
+    var hashes = Dict[
+        StringSlice[StaticConstantOrigin], StringSlice[StaticConstantOrigin]
+    ]()
     hashes["Illumina Universal Adapter"] = "AGATCGGAAGAG"
     hashes["Illumina Small RNA 3' Adapter"] = "TGGAATTCTCGG"
     hashes["Illumina Small RNA 5' Adapter"] = "GATCGTCGGACT"

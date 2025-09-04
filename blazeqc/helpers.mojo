@@ -1,5 +1,4 @@
 from python import PythonObject, Python
-from tensor import Tensor, TensorShape
 from memory import UnsafePointer, memcpy
 
 alias py_lib: String = "./.pixi/envs/default/lib/python3.12/site-packages/"
@@ -56,7 +55,7 @@ fn get_linear_interval(length: Int) -> Int:
 
     while True:
         for base in base_values:
-            interval = base[] * multiplier
+            interval = base * multiplier
             group_count = 9 + ((length - 9) // interval)
             if (length - 9) % interval != 0:
                 group_count += 1
@@ -110,7 +109,7 @@ fn make_linear_base_groups(max_length: Int) -> List[Int]:
 
 @always_inline
 fn bin_array(
-    arr: PythonObject, bins: List[Int], func: StringLiteral = "sum"
+    arr: PythonObject, bins: List[Int], func: String = "sum"
 ) raises -> Tuple[PythonObject, PythonObject]:
     Python.add_to_path(py_lib.as_string_slice())
     np = Python.import_module("numpy")
@@ -135,15 +134,19 @@ fn bin_array(
     return new_arr, py_bins
 
 
-@value
-struct QualitySchema(Stringable, CollectionElement, Writable):
-    var SCHEMA: StringLiteral
+@fieldwise_init
+struct QualitySchema(Copyable & Movable, Stringable, Writable):
+    var SCHEMA: StringSlice[StaticConstantOrigin]
     var LOWER: UInt8
     var UPPER: UInt8
     var OFFSET: UInt8
 
     fn __init__(
-        mut self, schema: StringLiteral, lower: Int, upper: Int, offset: Int
+        out self,
+        schema: StringSlice[StaticConstantOrigin],
+        lower: Int,
+        upper: Int,
+        offset: Int,
     ):
         self.SCHEMA = schema
         self.UPPER = upper
