@@ -1,7 +1,6 @@
 from memory import UnsafePointer, memcpy
 from extramojo.bstr.memchr import memchr
 
-
 alias ASCII_NEWLINE = ord("\n")
 alias ASCII_CARRIAGE_RETURN = ord("\r")
 alias ASCII_TAB = ord("\t")
@@ -30,16 +29,21 @@ struct SearchChar(Copyable, Movable):
 
 struct ByteString(Copyable, Movable, Sized):
     # TODO: add address_space
-    var size: UInt32
-    var cap: UInt32
+    var size: Int
+    var cap: Int
     var ptr: UnsafePointer[UInt8]
 
-    fn __init__(out self, capacity: UInt = 0):
+    fn __init__(out self, capacity: Int = 0):
         self.ptr = UnsafePointer[UInt8].alloc(0)
         self.size = 0
         self.cap = 0
         if capacity > 0:
             self.resize(capacity)
+
+    fn __init__(out self, owned string: String):
+        self.ptr = string.unsafe_ptr()
+        self.size = len(string)
+        self.cap = len(string)
 
     fn __del__(owned self):
         self.ptr.free()
@@ -65,7 +69,7 @@ struct ByteString(Copyable, Movable, Sized):
 
     @always_inline
     fn __len__(read self) -> Int:
-        return Int(self.size)
+        return self.size
 
     # TODO: rename offset
     @always_inline
@@ -74,7 +78,7 @@ struct ByteString(Copyable, Movable, Sized):
 
     @staticmethod
     @always_inline
-    fn _roundup32(val: UInt32) -> UInt32:
+    fn _roundup32(val: Int) -> Int:
         var x = val
         x -= 1
         x |= x >> 1
@@ -89,7 +93,7 @@ struct ByteString(Copyable, Movable, Sized):
         self.size = 0
 
     @always_inline
-    fn reserve(mut self, cap: UInt32):
+    fn reserve(mut self, cap: Int):
         if cap < self.cap:
             return
         self.cap = cap
@@ -99,7 +103,7 @@ struct ByteString(Copyable, Movable, Sized):
         self.ptr = new_data
 
     @always_inline
-    fn resize(mut self, size: UInt32):
+    fn resize(mut self, size: Int):
         var old_size = self.size
         self.size = size
         if self.size <= self.cap:
