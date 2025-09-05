@@ -10,9 +10,13 @@ from blazeseq.quality_schama import (
 from utils.variant import Variant
 
 alias schema = Variant[String, QualitySchema]
+alias read_header = ord("@")
+alias quality_header = ord("+")
+alias new_line = ord("\n")
+alias carriage_return = ord("\r")
 
 
-struct FastqRecord(Copyable, Movable, 
+struct FastqRecord(Copyable, Movable, Writable 
 #Sized, Stringable, Writable
 ):
     """Struct that represent a single FastaQ record."""
@@ -82,67 +86,42 @@ struct FastqRecord(Copyable, Movable,
 
     @always_inline
     fn validate_record(self) raises:
-        if self.SeqHeader[0] != read_header:
+        if self.SeqHeader.as_bytes()[0] != read_header:
             raise Error("Sequence Header is corrupt")
 
-        if self.QuHeader[0] != quality_header:
+        if self.QuHeader.as_bytes()[0] != quality_header:
             raise Error("Quality Header is corrupt")
 
-        if self.len_record() != self.len_quality():
+        if len(self.SeqStr) != len(self.QuStr):
             raise Error("Corrput Lengths")
 
-        if self.len_qu_header() > 1:
-            if self.len_qu_header() != self.len_seq_header():
+        if len(self.QuHeader) > 1:
+            if len(self.QuHeader) != len(self.SeqHeader):
                 raise Error("Quality Header is corrupt")
+            
+            if not self.QuHeader.as_string_slice()[1:] != self.SeqHeader.as_string_slice()[1:]:
+                raise Error("Quality Header is not the same as the Sequecing Header")
 
-        if self.len_qu_header() > 1:
-            for i in range(1, self.len_qu_header()):
-                if self.QuHeader[i] != self.SeqHeader[i]:
-                    raise Error("Non matching headers")
+    @always_inline
+    fn validate_quality_schema(self) raises:
+        for i in range(len(self.QuStr)):
+            if (
+                self.QuStr.as_bytes()[i] > self.quality_schema.UPPER
+                or self.QuStr.as_bytes()[i] < self.quality_schema.LOWER
+            ):
+                raise Error(
+                    "Corrput quality score according to proivded schema"
+                )
 
-    # @always_inline
-    # fn validate_quality_schema(self) raises:
-    #     for i in range(self.len_quality()):
-    #         if (
-    #             self.QuStr[i] > self.quality_schema.UPPER
-    #             or self.QuStr[i] < self.quality_schema.LOWER
-    #         ):
-    #             raise Error(
-    #                 "Corrput quality score according to proivded schema"
-    #             )
+    @always_inline
+    fn total_length(self) -> Int:
+        return (
+            len(self.QuHeader)
+            + len(self.QuStr)
+            + len(self.SeqHeader)
+            + len(self.SeqStr)
+        )
 
-    # @always_inline
-    # fn total_length(self) -> Int:
-    #     return (
-    #         self.len_seq_header()
-    #         + self.len_record()
-    #         + self.len_qu_header()
-    #         + self.len_quality()
-    #         + 4
-    #     )
-
-    # fn write_to[w: Writer](self, mut writer: w):
-    #     var l1 = String(
-    #         ptr=self.SeqHeader.unsafe_ptr(),
-    #         length=self.SeqHeader.num_elements(),
-    #     )
-    #     var l2 = String(
-    #         ptr=self.SeqStr.unsafe_ptr(), length=self.SeqStr.num_elements()
-    #     )
-    #     var l3 = String(
-    #         ptr=self.QuHeader.unsafe_ptr(), length=self.QuHeader.num_elements()
-    #     )
-    #     var l4 = String(
-    #         ptr=self.QuStr.unsafe_ptr(), length=self.QuStr.num_elements()
-    #     )
-    #     # writer.write_bytes(l1)
-    #     # writer.write("\n")
-    #     # writer.write_bytes(l2)
-    #     # writer.write("\n")
-    #     # writer.write_bytes(l3)
-    #     # writer.write("\n")
-    #     # writer.write_bytes(l4)
-    #     # writer.write("\n")
 
     @staticmethod
     @always_inline
@@ -169,30 +148,19 @@ struct FastqRecord(Copyable, Movable,
             return generic_schema
         return schema
 
-    # # BUG: returns Smaller strings that expected.
-    # @always_inline
-    # fn __str__(self) -> String:
-    #     return String.write(self)
+    # BUG: returns Smaller strings that expected.
+    @always_inline
+    fn __str__(self) -> String:
+        return String.write(self)
 
-    # @always_inline
-    # fn __len__(self) -> Int:
-    #     return self.len_record()
+    
+    fn write_to[w: Writer](self, mut writer: w):
+        writer.write(self.SeqHeader, "\n", self.SeqStr, "\n", self.QuHeader, "\n", self.QuStr, "\n")
 
-    # @always_inline
-    # fn len_record(self) -> Int:
-    #     return self.SeqStr.num_elements()
 
-    # @always_inline
-    # fn len_quality(self) -> Int:
-    #     return self.QuStr.num_elements()
-
-    # @always_inline
-    # fn len_qu_header(self) -> Int:
-    #     return self.QuHeader.num_elements()
-
-    # @always_inline
-    # fn len_seq_header(self) -> Int:
-    #     return self.SeqHeader.num_elements()
+    @always_inline
+    fn __len__(self) -> Int:
+        return len(self.SeqStr)
 
     # @always_inline
     # fn hash[bits: Int = 3, length: Int = 64 // bits](self) -> UInt64:
