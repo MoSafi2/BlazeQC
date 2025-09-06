@@ -1,3 +1,4 @@
+from hashlib.hasher import default_hasher, Hasher
 from blazeseq.quality_schama import (
     QualitySchema,
     sanger_schema,
@@ -5,7 +6,7 @@ from blazeseq.quality_schama import (
     solexa_schema,
     illumina_1_5_schema,
     illumina_1_8_schema,
-    generic_schema
+    generic_schema,
 )
 from utils.variant import Variant
 
@@ -16,9 +17,7 @@ alias new_line = ord("\n")
 alias carriage_return = ord("\r")
 
 
-struct FastqRecord(Copyable, Movable, Writable 
-#Sized, Stringable, Writable
-):
+struct FastqRecord(Copyable, Hashable, Movable, Sized, Writable):
     """Struct that represent a single FastaQ record."""
 
     var SeqHeader: String
@@ -41,7 +40,7 @@ struct FastqRecord(Copyable, Movable, Writable
         self.QuStr = QuStr
 
         if quality_schema.isa[String]():
-            self.quality_schema = self._parse_schema(quality_schema[String])
+            self.quality_schema = _parse_schema(quality_schema[String])
         else:
             self.quality_schema = quality_schema[QualitySchema]
 
@@ -54,22 +53,18 @@ struct FastqRecord(Copyable, Movable, Writable
         return self.QuStr.as_string_slice()
 
     @always_inline
-    fn get_qulity_scores(
-        self, quality_format: String
-    ) -> List[UInt8]:
-        var schema = self._parse_schema((quality_format))
-        output = List[UInt8](capacity=len(self.QuStr))
-        bytes = self.QuStr.as_bytes()
-        for i in range(len(self.QuStr)):
-            output[i] = bytes[i] - schema.OFFSET
-        return output
+    fn get_qulity_scores(self, mut quality_format: schema) -> List[UInt8]:
+        var in_schema: QualitySchema
 
-    @always_inline
-    fn get_qulity_scores(self, schema: QualitySchema) -> List[UInt8]:
+        if quality_format.isa[String]():
+            in_schema = _parse_schema(quality_format.take[String]())
+        else:
+            in_schema = quality_format.take[QualitySchema]()
+
         output = List[UInt8](capacity=len(self.QuStr))
         bytes = self.QuStr.as_bytes()
         for i in range(len(self.QuStr)):
-            output[i] = bytes[i] - schema.OFFSET
+            output[i] = bytes[i] - in_schema.OFFSET
         return output
 
     @always_inline
@@ -98,9 +93,14 @@ struct FastqRecord(Copyable, Movable, Writable
         if len(self.QuHeader) > 1:
             if len(self.QuHeader) != len(self.SeqHeader):
                 raise Error("Quality Header is corrupt")
-            
-            if not self.QuHeader.as_string_slice()[1:] != self.SeqHeader.as_string_slice()[1:]:
-                raise Error("Quality Header is not the same as the Sequecing Header")
+
+            if (
+                not self.QuHeader.as_string_slice()[1:]
+                != self.SeqHeader.as_string_slice()[1:]
+            ):
+                raise Error(
+                    "Quality Header is not the same as the Sequecing Header"
+                )
 
     @always_inline
     fn validate_quality_schema(self) raises:
@@ -122,45 +122,61 @@ struct FastqRecord(Copyable, Movable, Writable
             + len(self.SeqStr)
         )
 
-
-    @staticmethod
-    @always_inline
-    fn _parse_schema(quality_format: String) -> QualitySchema:
-        var schema: QualitySchema
-
-        if quality_format == "sanger":
-            schema = sanger_schema
-        elif quality_format == "solexa":
-            schema = solexa_schema
-        elif quality_format == "illumina_1.3":
-            schema = illumina_1_3_schema
-        elif quality_format == "illumina_1.5":
-            schema = illumina_1_5_schema
-        elif quality_format == "illumina_1.8":
-            schema = illumina_1_8_schema
-        elif quality_format == "generic":
-            schema = generic_schema
-        else:
-            print(
-                "Uknown quality schema please choose one of 'sanger', 'solexa',"
-                " 'illumina_1.3', 'illumina_1.5' 'illumina_1.8', or 'generic'"
-            )
-            return generic_schema
-        return schema
-
-    # BUG: returns Smaller strings that expected.
     @always_inline
     fn __str__(self) -> String:
         return String.write(self)
 
-    
     fn write_to[w: Writer](self, mut writer: w):
-        writer.write(self.SeqHeader, "\n", self.SeqStr, "\n", self.QuHeader, "\n", self.QuStr, "\n")
-
+        writer.write(
+            self.SeqHeader,
+            "\n",
+            self.SeqStr,
+            "\n",
+            self.QuHeader,
+            "\n",
+            self.QuStr,
+            "\n",
+        )
 
     @always_inline
     fn __len__(self) -> Int:
         return len(self.SeqStr)
+
+    @always_inline
+    fn __hash__[H: Hasher](self, mut hasher: H):
+        hasher.update(self.SeqStr.as_string_slice())
+
+    @always_inline
+    fn __eq__(self, other: Self) -> Bool:
+        return self.SeqStr == other.SeqStr
+
+    fn __ne__(self, other: Self) -> Bool:
+        return not self.__eq__(other)
+
+
+@always_inline
+fn _parse_schema(quality_format: String) -> QualitySchema:
+    var schema: QualitySchema
+
+    if quality_format == "sanger":
+        schema = sanger_schema
+    elif quality_format == "solexa":
+        schema = solexa_schema
+    elif quality_format == "illumina_1.3":
+        schema = illumina_1_3_schema
+    elif quality_format == "illumina_1.5":
+        schema = illumina_1_5_schema
+    elif quality_format == "illumina_1.8":
+        schema = illumina_1_8_schema
+    elif quality_format == "generic":
+        schema = generic_schema
+    else:
+        print(
+            "Uknown quality schema please choose one of 'sanger', 'solexa',"
+            " 'illumina_1.3', 'illumina_1.5' 'illumina_1.8', or 'generic'"
+        )
+        return generic_schema
+    return schema
 
     # @always_inline
     # fn hash[bits: Int = 3, length: Int = 64 // bits](self) -> UInt64:
@@ -199,48 +215,3 @@ struct FastqRecord(Copyable, Movable, Writable
     #         var base_val = bytes[i] & mask
     #         hash = (hash << bits) | Int(base_val[i])
     #     return hash
-
-    # # Change to a better hashing Algorithm
-    # @staticmethod
-    # @always_inline
-    # fn _hash_additive[
-    #     bits: Int = 3
-    # ](bytes: UnsafePointer[UInt8], length: Int) -> UInt64:
-    #     """Hashes longer DNA sequences . It hashes 16bps spans of the sequences and using 2 or 3 bit encoding and adds them to the hash.
-    #     """
-    #     constrained[
-    #         bits <= 3, "Additive hashing can only hash up to 3bit resolution"
-    #     ]()
-    #     var full_hash: UInt64 = 0
-    #     var mask = (0b1 << bits) - 1
-    #     var rounds = align_down(length, 16)
-    #     var rem = length % 16
-
-    #     for round in range(rounds):
-    #         var interim_hash: UInt64 = 0
-
-    #         @parameter
-    #         for i in range(16):
-    #             var base_val = bytes[i + 16 * round] & mask
-    #             interim_hash = interim_hash << bits | Int(base_val)
-    #         full_hash = full_hash + interim_hash
-
-    #     if rem > 0:
-    #         var interim_hash: UInt64 = 0
-    #         for i in range(rem):
-    #             var base_val = bytes[i + 16 * rounds] & mask
-    #             interim_hash = interim_hash << bits | Int(base_val)
-    #         full_hash = full_hash + interim_hash
-
-    #     return full_hash
-
-    # @always_inline
-    # fn __hash__(self) -> UInt:
-    #     return Int(self.hash())
-
-    # @always_inline
-    # fn __eq__(self, other: Self) -> Bool:
-    #     return self.__hash__() == other.__hash__()
-
-    # fn __ne__(self, other: Self) -> Bool:
-    #     return self.__hash__() != other.__hash__()
