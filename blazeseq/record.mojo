@@ -17,7 +17,9 @@ alias new_line = ord("\n")
 alias carriage_return = ord("\r")
 
 
-struct FastqRecord(Copyable, Hashable, Movable, Sized, Writable):
+struct FastqRecord[val: Bool = True](
+    Copyable, Hashable, Movable, Sized, Writable
+):
     """Struct that represent a single FastaQ record."""
 
     var SeqHeader: String
@@ -43,6 +45,11 @@ struct FastqRecord(Copyable, Hashable, Movable, Sized, Writable):
             self.quality_schema = _parse_schema(quality_schema[String])
         else:
             self.quality_schema = quality_schema[QualitySchema]
+
+        @parameter
+        if val:
+            self.validate_record()
+            self.validate_quality_schema()
 
     @always_inline
     fn get_seq(self) -> StringSlice[__origin_of(self.SeqStr)]:
@@ -82,17 +89,21 @@ struct FastqRecord(Copyable, Hashable, Movable, Sized, Writable):
     @always_inline
     fn validate_record(self) raises:
         if self.SeqHeader.as_bytes()[0] != read_header:
-            raise Error("Sequence Header is corrupt")
+            raise Error("Sequence header does not start with '@'")
 
         if self.QuHeader.as_bytes()[0] != quality_header:
-            raise Error("Quality Header is corrupt")
+            raise Error("Quality header dies not start with '+'")
 
         if len(self.SeqStr) != len(self.QuStr):
-            raise Error("Corrput Lengths")
+            raise Error(
+                "Quality and Sequencing string does not match in lengths"
+            )
 
         if len(self.QuHeader) > 1:
             if len(self.QuHeader) != len(self.SeqHeader):
-                raise Error("Quality Header is corrupt")
+                raise Error(
+                    "Quality Header is not the same as the Sequencing header"
+                )
 
             if (
                 not self.QuHeader.as_string_slice()[1:]
@@ -215,3 +226,15 @@ fn _parse_schema(quality_format: String) -> QualitySchema:
     #         var base_val = bytes[i] & mask
     #         hash = (hash << bits) | Int(base_val[i])
     #     return hash
+
+
+fn main() raises:
+    var i = FastqRecord(
+        SeqHeader="@SEQ_ID",
+        SeqStr="GATTTGGGGTTCAAAGCAGTATCGATCAAATAGTAAATCCATTTGTTCAACTCACAGTTT",
+        QuHeader="+SEQ_ID",
+        QuStr="!''*((((***+))%%%++)(%%%%).1***-+*''))**55CCF>>>>>>CCCCCCC65",
+    )
+
+    print(i)
+    print(len(i))
