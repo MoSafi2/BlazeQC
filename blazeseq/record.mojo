@@ -18,7 +18,13 @@ alias carriage_return = ord("\r")
 
 
 struct FastqRecord[val: Bool = True](
-    Copyable, Hashable, Movable, Sized, Writable
+    Copyable,
+    EqualityComparable,
+    Hashable,
+    Movable,
+    Representable,
+    Sized,
+    Writable,
 ):
     """Struct that represent a single FastaQ record."""
 
@@ -163,6 +169,9 @@ struct FastqRecord[val: Bool = True](
 
     fn __ne__(self, other: Self) -> Bool:
         return not self.__eq__(other)
+    
+    fn __repr__(self) -> String:
+        return self.__str__()
 
 
 @always_inline
@@ -232,9 +241,12 @@ fn main() raises:
     var i = FastqRecord(
         SeqHeader="@SEQ_ID",
         SeqStr="GATTTGGGGTTCAAAGCAGTATCGATCAAATAGTAAATCCATTTGTTCAACTCACAGTTT",
-        QuHeader="+SEQ_ID",
+        QuHeader="+",
         QuStr="!''*((((***+))%%%++)(%%%%).1***-+*''))**55CCF>>>>>>CCCCCCC65",
     )
+    jj = default_hasher()
+    i.__hash__(jj)
+    print(jj.pad)
+    print(hash(i))
 
-    print(i)
-    print(len(i))
+
