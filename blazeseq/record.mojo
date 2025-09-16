@@ -216,51 +216,10 @@ fn _parse_schema(quality_format: String) -> QualitySchema:
         return generic_schema
     return schema
 
-    # @always_inline
-    # fn hash[bits: Int = 3, length: Int = 64 // bits](self) -> UInt64:
-    #     """Hashes the first xx bp (if possible) into one 64bit. Max length is 64/nBits per bp.
-    #     """
-
-    #     @parameter
-    #     if length < 32:
-    #         return self._hash_packed(self.SeqStr.unsafe_ptr(), length)
-    #     return self._hash_additive(self.SeqStr.unsafe_ptr(), length)
-
-    # # Can be Vectorized
-    # @staticmethod
-    # @always_inline
-    # fn _hash_packed[
-    #     bits: Int = 3
-    # ](bytes: UnsafePointer[Byte], length: Int) -> UInt64:
-    #     """
-    #     Hash the DNA strand to into 64bits unsigned number using xbit encoding.
-    #     If the length of the bytes strand is longer than 64//bits bps, the hash is truncated.
-    #     ----
-
-    #     parameters:
-    #     - bits (Int): the number of least significant bits used to hash a base pair. increased bit width reduces the number of bp that can be hashed.
-
-    #     args:
-    #     - bytes (UnsafePointer[Byte]): pointer the the basepair buffer.
-    #     - length (Int): the length of the buffer to be hashed.
-    #     """
-    #     alias rnge: Int = 64 // bits
-    #     alias width = simdwidthof[Byte]()
-    #     var hash: UInt64 = 0
-    #     var mask = (0b1 << bits) - 1
-    #     for i in range(min(rnge, length)):
-    #         # Mask for for first <n> significant bits, vectorized operation.
-    #         var base_val = bytes[i] & mask
-    #         hash = (hash << bits) | Int(base_val[i])
-    #     return hash
-
 
 fn main() raises:
     var i = FastqRecord(
-        """@SEQ_ID
-        GATTTGGGGTTCAAAGCAGTATCGATCAAATAGTAAATCCATTTGTTCAACTCACAGTTT"
-        +SEQ_ID
-        !!''*((((***+))%%%++)(%%%%).1***-+*''))**55CCF>>>>>>CCCCCCC65
+        """@SEQ_ID\nGATTTGGGGTTCAAAGCAGTATCGATCAAATAGTAAATCCATTTGTTCAACTCACAGTTT"\n+SEQ_ID\n!!''*((((***+))%%%++)(%%%%).1***-+*''))**55CCF>>>>>>CCCCCCC65
         """
     )
     print(i)
