@@ -57,6 +57,23 @@ struct FastqRecord[val: Bool = True](
             self.validate_record()
             self.validate_quality_schema()
 
+    fn __init__(out self, sequence: String) raises:
+        var seqs = sequence.strip().split("\n")
+        if len(seqs) > 4:
+            raise Error("Sequence does not seem to be valid")
+
+        # Bug when Using
+        self.SeqHeader = String(seqs[0].strip())
+        self.SeqStr = String(seqs[1].strip())
+        self.QuHeader = String(seqs[2].strip())
+        self.QuStr = String(seqs[3].strip())
+        self.quality_schema = generic_schema
+
+        @parameter
+        if val:
+            self.validate_record()
+            self.validate_quality_schema()
+
     @always_inline
     fn get_seq(self) -> StringSlice[__origin_of(self.SeqStr)]:
         return self.SeqStr.as_string_slice()
@@ -108,11 +125,12 @@ struct FastqRecord[val: Bool = True](
         if len(self.QuHeader) > 1:
             if len(self.QuHeader) != len(self.SeqHeader):
                 raise Error(
-                    "Quality Header is not the same as the Sequencing header"
+                    "Quality Header is not the same length as the Sequencing"
+                    " header"
                 )
 
             if (
-                not self.QuHeader.as_string_slice()[1:]
+                self.QuHeader.as_string_slice()[1:]
                 != self.SeqHeader.as_string_slice()[1:]
             ):
                 raise Error(
@@ -169,7 +187,7 @@ struct FastqRecord[val: Bool = True](
 
     fn __ne__(self, other: Self) -> Bool:
         return not self.__eq__(other)
-    
+
     fn __repr__(self) -> String:
         return self.__str__()
 
@@ -239,14 +257,10 @@ fn _parse_schema(quality_format: String) -> QualitySchema:
 
 fn main() raises:
     var i = FastqRecord(
-        SeqHeader="@SEQ_ID",
-        SeqStr="GATTTGGGGTTCAAAGCAGTATCGATCAAATAGTAAATCCATTTGTTCAACTCACAGTTT",
-        QuHeader="+",
-        QuStr="!''*((((***+))%%%++)(%%%%).1***-+*''))**55CCF>>>>>>CCCCCCC65",
+        """@SEQ_ID
+        GATTTGGGGTTCAAAGCAGTATCGATCAAATAGTAAATCCATTTGTTCAACTCACAGTTT"
+        +SEQ_ID
+        !!''*((((***+))%%%++)(%%%%).1***-+*''))**55CCF>>>>>>CCCCCCC65
+        """
     )
-    jj = default_hasher()
-    i.__hash__(jj)
-    print(jj.pad)
-    print(hash(i))
-
-
+    print(i)
