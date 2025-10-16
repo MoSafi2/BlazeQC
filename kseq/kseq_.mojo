@@ -1,30 +1,11 @@
 """
 Mojo port of some of kseq based on the Crystal implementation in the biofast repo.
-
-# ```mojo
-# from ishlib.vendor.kseq import FastxReader, BufferedReader
-# from ishlib.vendor.zlib import GZFile
-
-# def main():
-#     var reader = FastxReader[read_comment=False](
-#         BufferedReader(GZFile("./M_abscessus_HiSeq.fq", "r"))
-#     )
-
-#     var count = 0
-#     var slen = 0
-#     var qlen = 0
-#     while reader.read() > 0:
-#         count += 1
-#         slen += len(reader.seq)
-#         qlen += len(reader.qual)
-#     print(count, slen, qlen, sep="\t")
-# ```
 """
-from memory import UnsafePointer, memcpy
-
+from memory import UnsafePointer, memcpy, pack_bits
+from bit import count_trailing_zeros
+from sys.info import simd_width_of
+import math
 from time.time import perf_counter
-
-from extramojo.bstr.memchr import memchr
 from kseq.zlib import GZFile, KRead
 
 
@@ -35,6 +16,83 @@ alias ASCII_SPACE = ord(" ")
 alias ASCII_FASTA_RECORD_START = ord(">")
 alias ASCII_FASTQ_RECORD_START = ord("@")
 alias ASCII_FASTQ_SEPARATOR = ord("+")
+
+
+alias SIMD_U8_WIDTH: Int = simd_width_of[DType.uint8]()
+
+@always_inline("nodebug")
+fn memchr[
+    do_alignment: Bool = False
+](haystack: Span[UInt8], chr: UInt8, start: Int = 0) -> Int:
+    """
+    Function to find the next occurrence of character.
+
+
+    Args:
+        haystack: The bytes to search for the `chr`.
+        chr: The byte to search for.
+        start: The starting point to begin the search in `haystack`.
+
+    Parameters:
+        do_alignment: If True this will do an aligning read at the very start of the haystack.
+                      If your haystack is very long, this may provide a marginal benefit. If the haystack is short,
+                      or the needle is frequently in the first `SIMD_U8_WIDTH * 2` bytes, then skipping the
+                      aligning read can be very beneficial since the aligning read check will overlap some
+                      amount with the subsequent aligned read that happens next.
+
+    Returns:
+        The index of the found character, or -1 if not found.
+    """
+    if len(haystack[start:]) < SIMD_U8_WIDTH:
+        for i in range(start, len(haystack)):
+            if haystack[i] == chr:
+                return i
+        return -1
+
+    # Do an unaligned initial read, it doesn't matter that this will overlap the next portion
+    var ptr = haystack[start:].unsafe_ptr()
+
+    var offset = 0
+
+    @parameter
+    if do_alignment:
+        var v = ptr.load[width=SIMD_U8_WIDTH]()
+        var mask = v.eq(chr)
+
+        var packed = pack_bits(mask)
+        if packed:
+            var index = Int(count_trailing_zeros(packed))
+            return index + start
+
+        # Now get the alignment
+        offset = SIMD_U8_WIDTH - (ptr.__int__() & (SIMD_U8_WIDTH - 1))
+        # var aligned_ptr = ptr.offset(offset)
+        ptr = ptr.offset(offset)
+
+    # Find the last aligned end
+    var haystack_len = len(haystack) - (start + offset)
+    var aligned_end = math.align_down(
+        haystack_len, SIMD_U8_WIDTH
+    )  # relative to start + offset
+
+    # Now do aligned reads all through
+    for s in range(0, aligned_end, SIMD_U8_WIDTH):
+        var v = ptr.load[width=SIMD_U8_WIDTH](s)
+        var mask = v.eq(chr)
+        var packed = pack_bits(mask)
+        if packed:
+            var index = Int(count_trailing_zeros(packed))
+            return s + index + offset + start
+
+    # Finish and last bytes
+    for i in range(aligned_end + start + offset, len(haystack)):
+        if haystack[i] == chr:
+            return i
+
+    return -1
+
+
+alias LOOP_SIZE = SIMD_U8_WIDTH * 4
 
 
 @fieldwise_init
@@ -79,7 +137,7 @@ struct ByteString(Sized, Copyable, Movable, ImplicitlyCopyable):
         self.cap = other.cap
         self.size = other.size
         self.ptr = UnsafePointer[UInt8].alloc(Int(self.cap))
-        memcpy(self.ptr, other.ptr, Int(other.size))
+        memcpy(dest=self.ptr, src=other.ptr, count=Int(other.size))
 
     @always_inline
     fn __getitem__[I: Indexer](read self, idx: I) -> UInt8:
@@ -120,7 +178,7 @@ struct ByteString(Sized, Copyable, Movable, ImplicitlyCopyable):
             return
         self.cap = cap
         var new_data = UnsafePointer[UInt8].alloc(Int(self.cap))
-        memcpy(new_data, self.ptr, len(self))
+        memcpy(dest=new_data, src=self.ptr, count=len(self))
         self.ptr.free()
         self.ptr = new_data
 
@@ -132,7 +190,7 @@ struct ByteString(Sized, Copyable, Movable, ImplicitlyCopyable):
             return
         self.cap = Self._roundup32(self.size)
         var new_data = UnsafePointer[UInt8].alloc(Int(self.cap))
-        memcpy(new_data, self.ptr, Int(old_size))
+        memcpy(dest=new_data, src=self.ptr, count=Int(old_size))
 
         self.ptr.free()
         self.ptr = new_data
@@ -151,12 +209,12 @@ struct ByteString(Sized, Copyable, Movable, ImplicitlyCopyable):
 
         var old_size = len(self)
         self.resize(len(self) + length)
-        memcpy(self.ptr.offset(old_size), ptr, Int(length))
+        memcpy(dest=self.ptr.offset(old_size), src=ptr, count=Int(length))
 
     fn find_chr[c: UInt8](read self, start: Int, end: Int) -> Int:
         var p = memchr[do_alignment=False](
             Span[UInt8, __origin_of(self.ptr)](
-                ptr=self.ptr.offset(start), length=end - start
+                ptr=self.ptr.offset(start), length=UInt(end - start)
             ),
             c,
         )
@@ -166,7 +224,7 @@ struct ByteString(Sized, Copyable, Movable, ImplicitlyCopyable):
     fn find_chr(read self, c: UInt8, start: Int, end: Int) -> Int:
         var p = memchr[do_alignment=False](
             Span[UInt8, __origin_of(self.ptr)](
-                ptr=self.ptr.offset(start), length=end - start
+                ptr=self.ptr.offset(start), length=UInt(end - start)
             ),
             c,
         )
@@ -191,7 +249,7 @@ struct ByteString(Sized, Copyable, Movable, ImplicitlyCopyable):
 
     @always_inline
     fn as_span[mut: Bool, //, o: Origin[mut]](ref [o]self) -> Span[UInt8, o]:
-        return Span[UInt8, o](ptr=self.ptr, length=len(self))
+        return Span[UInt8, o](ptr=self.ptr, length=UInt(len(self)))
 
     fn to_string(self) -> String:
         return String(StringSlice(unsafe_from_utf8=self.as_span()))
