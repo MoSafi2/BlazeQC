@@ -1,4 +1,6 @@
 """
+FROM ishlib: https://github.com/BioRadOpenSource/ish/tree/main,
+FROM ExtraMojo: https://github.com/ExtraMojo/ExtraMojo/blob/main/extramojo/bstr/memchr.mojo
 Mojo port of some of kseq based on the Crystal implementation in the biofast repo.
 """
 from memory import UnsafePointer, memcpy, pack_bits

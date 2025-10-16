@@ -1,4 +1,6 @@
 """
+FROM ishlib: https://github.com/BioRadOpenSource/ish/tree/main,
+
 Mojo bindings for zlib.
 
 Note that `GZFile` will auto detect compression. If the file is not compressed
