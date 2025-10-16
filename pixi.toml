@@ -1,6 +1,12 @@
 [project]
 authors = ["MoSafi2 <mohamed.mabrouk@rwth-aachen.de>"]
-channels = ["conda-forge", "https://conda.modular.com/max", "bioconda", "https://repo.prefix.dev/modular-community"]
+channels = [
+    "https://conda.modular.com/max-nightly",
+    "https://repo.prefix.dev/modular-community",
+    "conda-forge",
+    "bioconda"
+]
+preview = ["pixi-build"]
 description = "Add a short description here"
 name = "BlazeSeq"
 platforms = ["linux-64"]
@@ -9,15 +15,12 @@ version = "0.1.0"
 [tasks]
 
 [dependencies]
-mojo = ">=25.5.0,<26"
 matplotlib = ">=3.10.6,<4"
 numpy = ">=2.3.3,<3"
 seaborn = ">=0.13.2,<0.14"
-fastqc = ">=0.12.1,<0.13"
 ipykernel = ">=6.30.1,<7"
 falco = ">=1.2.5,<2"
 fastp = ">=1.0.1,<2"
-extramojo = ">=0.17.0,<0.18"
-
-[pypi-dependencies]
-pymodo = ">=0.11.12, <0.12"
+mojo = "=0.25.6.1"
+python = ">=3.14.0,<3.15"
+extramojo = { git = "https://github.com/ExtraMojo/ExtraMojo.git" }
