@@ -13,7 +13,7 @@ fn hash_list() -> List[UInt64]:
         _seq_to_hash("AAAAAAAAAAAA"),
         _seq_to_hash("GGGGGGGGGGGG"),
     )
-    return li
+    return li^
 
 
 # TODO: Check how to unpack this variadic
@@ -27,7 +27,7 @@ def hash_names() -> List[StringSlice[StaticConstantOrigin]]:
         "PolyG",
     ]
 
-    return names
+    return names^
 
 
 def get_hashes() -> (
@@ -42,4 +42,4 @@ def get_hashes() -> (
     hashes["Nextera Transposase Sequence"] = "CTGTCTCTTATA"
     hashes["PolyA"] = "AAAAAAAAAAAA"
     hashes["PolyG"] = "GGGGGGGGGGGG"
-    return hashes
+    return hashes^

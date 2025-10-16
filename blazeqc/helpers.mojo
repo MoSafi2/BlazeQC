@@ -2,7 +2,7 @@ from python import PythonObject, Python
 from memory import UnsafePointer, memcpy
 
 alias py_lib: String = "./.pixi/envs/default/lib/python3.12/site-packages/"
-
+alias Tensor[T: AnyTrivialRegType] = List[T]
 
 fn encode_img_b64(fig: PythonObject) raises -> String:
     Python.add_to_path(py_lib.as_string_slice())
@@ -116,7 +116,7 @@ fn bin_array(
 
     py_bins = Python.list()
     for i in bins:
-        py_bins.append(i[])
+        py_bins.append(i)
     x = np.linspace(0, arr.shape[0], arr.shape[0])
     binned_array = np.digitize(x, py_bins)
     py_binned_slices = Python.list()
