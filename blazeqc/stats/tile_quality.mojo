@@ -83,15 +83,15 @@ struct PerTileQuality(Analyser, Copyable, Movable):
     # TODO: Construct a n_keys*max_length array to hold all information.
     fn plot(self) raises -> PythonObject:
         Python.add_to_path(py_lib.as_string_slice())
-        np = Python.import_module("numpy")
-        sns = Python.import_module("seaborn")
-        plt = Python.import_module("matplotlib.pyplot")
+        var np = Python.import_module("numpy")
+        var sns = Python.import_module("seaborn")
+        var plt = Python.import_module("matplotlib.pyplot")
 
-        z = plt.subplots()
-        fig = z[0]
-        ax = z[1]
+        var z = plt.subplots()
+        var fig = z[0]
+        var ax = z[1]
 
-        arr = np.zeros(self.max_length)
+        var arr = np.zeros(self.max_length)
         for i in self.map.keys():
             temp_arr = tensor_to_numpy_1d(self.map[i].quality)
             arr = np.vstack(Python.tuple(arr, temp_arr))

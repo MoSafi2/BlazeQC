@@ -73,7 +73,7 @@ struct BasepairDistribution(Analyser, Movable):
         var fig = x[0]
         var ax = x[1]
 
-        bins_range = Python.list()
+        var bins_range = Python.list()
         for i in range(len(bins)):
             bins_range.append(i)
 
@@ -98,11 +98,11 @@ struct BasepairDistribution(Analyser, Movable):
         var ax2 = y[1]
         ax2.plot(arr2)
 
-        bins_range = Python.list()
+        var bins_range_2 = Python.list()
         for i in range(len(bins)):
-            bins_range.append(i)
+            bins_range_2.append(i)
 
-        ax2.set_xticks(bins_range)
+        ax2.set_xticks(bins_range_2)
         ax2.set_xticklabels(py_bins, rotation=45)
         ax2.xaxis.set_major_locator(
             mtp.ticker.MaxNLocator(integer=True, nbins=15)

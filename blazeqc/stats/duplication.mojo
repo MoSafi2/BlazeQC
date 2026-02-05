@@ -151,9 +151,9 @@ struct DupReads(Analyser, Copyable, Movable):
                 (total_percentages[i] / Float64(total_reads)) * Float64(100)
             )
         var final_arr = list_float64_to_numpy(new_arr)
-        var f: PythonObject = plt.subplots()
-        var fig: PythonObject = f.__getitem__(0)
-        var ax: PythonObject = f.__getitem__(1)
+        var f = plt.subplots()
+        var fig = f[0]
+        var ax = f[1]
         ax.plot(final_arr)
         var tick_positions = Python.list(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15)
         ax.set_xticks(tick_positions)

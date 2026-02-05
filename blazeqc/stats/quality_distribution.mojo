@@ -86,7 +86,7 @@ struct QualityDistribution(Analyser, Copyable, Movable):
         self, arr: PythonObject, min_index: Int, max_index: Int
     ) raises -> PythonObject:
         var np = Python.import_module("numpy")
-        indices = np.arange(min_index, max_index)
+        var indices = np.arange(min_index, max_index)
         return np.take(arr, indices, axis=1)
 
     fn plot(self) raises -> Tuple[PythonObject, PythonObject]:
@@ -111,27 +111,27 @@ struct QualityDistribution(Analyser, Copyable, Movable):
         # TODO: Convert as much as possible away from numpy
         var nrows = Int(py=arr.shape[0])
         var ncols = Int(py=arr.shape[1])
-        mean_line = np.sum(
+        var mean_line = np.sum(
             arr * np.arange(1, ncols + 1), axis=1
         ) / np.sum(arr, axis=1)
-        cum_sum = np.cumsum(arr, axis=1)
-        total_counts = np.reshape(np.sum(arr, axis=1), Python.tuple(nrows, 1))
-        median = np.argmax(cum_sum > total_counts / 2, axis=1)
-        Q75 = np.argmax(cum_sum > total_counts * 0.75, axis=1)
-        Q25 = np.argmax(cum_sum > total_counts * 0.25, axis=1)
-        IQR = Q75 - Q25
+        var cum_sum = np.cumsum(arr, axis=1)
+        var total_counts = np.reshape(np.sum(arr, axis=1), Python.tuple(nrows, 1))
+        var median = np.argmax(cum_sum > total_counts / 2, axis=1)
+        var Q75 = np.argmax(cum_sum > total_counts * 0.75, axis=1)
+        var Q25 = np.argmax(cum_sum > total_counts * 0.25, axis=1)
+        var IQR = Q75 - Q25
 
-        # Get Python None via getattr(builtins, "None") for boxplot default whiskers
+        # Get Python None via builtins for boxplot default whiskers (see docs: Calling Python from Mojo)
         var builtins = Python.import_module("builtins")
         var getattr_fn = builtins.get("getattr")
         var py_none = getattr_fn(builtins, "None")
-        whislo = np.full(len(IQR), py_none)
-        whishi = np.full(len(IQR), py_none)
+        var whislo = np.full(len(IQR), py_none)
+        var whishi = np.full(len(IQR), py_none)
 
-        x = plt.subplots()
-        fig = x[0]
-        ax = x[1]
-        l = Python.list()
+        var x = plt.subplots()
+        var fig = x[0]
+        var ax = x[1]
+        var l = Python.list()
         for i in range(len(IQR)):
             var stat: PythonObject = Python.dict()
             stat["med"] = median[i]
@@ -147,7 +147,7 @@ struct QualityDistribution(Analyser, Copyable, Movable):
         ax.set_title("Quality Scores across all bases")
         ax.set_xlabel("Position in read (bp)")
 
-        bins_range = Python.list()
+        var bins_range = Python.list()
         for i in range(len(bins)):
             bins_range.append(i)
 
@@ -162,17 +162,17 @@ struct QualityDistribution(Analyser, Copyable, Movable):
         ###############################################################
 
         # Finding the last non-zero index
-        index = 0
+        var index = 0
         for i in range(len(self.qu_dist_seq) - 1, -1, -1):
             if self.qu_dist_seq[i] != 0:
                 index = i
                 break
 
-        arr2 = tensor_to_numpy_1d(self.qu_dist_seq)
+        var arr2 = tensor_to_numpy_1d(self.qu_dist_seq)
         arr2 = arr2[Int(schema.OFFSET) : index + 2]
-        z = plt.subplots()
-        fig2 = z[0]
-        ax2 = z[1]
+        var z = plt.subplots()
+        var fig2 = z[0]
+        var ax2 = z[1]
         ax2.plot(arr2)
         ax2.set_xlabel("Mean Sequence Quality (Phred Score)")
         ax2.set_title("Quality score distribution over all sequences")

@@ -94,7 +94,7 @@ struct LengthDistribution(Analyser, Copyable, Movable):
         # bins = make_linear_base_groups(self.length_vector.num_elements())
         arr3, py_bins = bin_array(arr3, bins, func="mean")
 
-        ticks = Python.list()
+        var ticks = Python.list()
         for i in range(len(bins)):
             ticks.append(i)
 

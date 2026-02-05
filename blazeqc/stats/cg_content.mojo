@@ -56,7 +56,7 @@ struct CGContent(Analyser, Copyable, Movable):
     # TODO: Convert as much as possible away from numpy
     fn calculate_theoritical_distribution(self) raises -> PythonObject:
         var np = Python.import_module("numpy")
-        sc = Python.import_module("scipy")
+        var sc = Python.import_module("scipy")
         var arr = tensor_to_numpy_1d(self.cg_content)
         var total_counts = np.sum(arr)
         var x_categories = np.arange(len(arr))
