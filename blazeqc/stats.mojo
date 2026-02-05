@@ -7,11 +7,12 @@ from utils import Index
 from memory import Span
 from python import Python, PythonObject
 from blazeqc.helpers import (
-    cpy_tensor,
+    Matrix2D,
     QualitySchema,
     base2int,
     _seq_to_hash,
     tensor_to_numpy_1d,
+    list_float64_to_numpy,
     matrix_to_numpy,
     grow_tensor,
     grow_matrix,
@@ -95,7 +96,7 @@ struct FullStats(Movable & Copyable):
     @always_inline
     fn make_base_stats(self) raises -> result_panel:
         var sum: Int64 = 0
-        for i in range(self.cg_content.cg_content.num_elements()):
+        for i in range(len(self.cg_content.cg_content)):
             sum += self.cg_content.cg_content[i] * i
         var avg_cg = (sum / self.num_reads)
         var schema = self.qu_dist._guess_schema()
@@ -222,47 +223,42 @@ struct FullStats(Movable & Copyable):
 
 @value
 struct BasepairDistribution(Analyser):
-    var bp_dist: Tensor[DType.int64]
+    var bp_dist: Matrix2D
     var max_length: Int
     var min_length: Int
     comptime WIDTH = 5
 
     fn __init__(out self):
-        var shape = TensorShape(VariadicList[Int](1, self.WIDTH))
-        self.bp_dist = Tensor[DType.int64](shape)
+        self.bp_dist = Matrix2D(1, self.WIDTH)
         self.max_length = 0
         self.min_length = Int.MAX
 
     fn tally_read(mut self, record: FastqRecord):
         if record.len_record() > self.max_length:
             self.max_length = record.len_record()
-            var new_tensor = grow_matrix(
-                self.bp_dist, TensorShape(self.max_length, self.WIDTH)
+            var new_mat = grow_matrix(
+                self.bp_dist, self.max_length, self.WIDTH
             )
-            swap(self.bp_dist, new_tensor)
+            swap(self.bp_dist, new_mat)
 
         if record.len_record() < self.min_length:
             self.min_length = record.len_record()
 
         for i in range(record.len_record()):
-            # Remineder of first 5 bits seperates N from T
             var base_val = Int((record.SeqStr[i] & 0b11111) % self.WIDTH)
-            var index = VariadicList[Int](i, base_val)
-            self.bp_dist[index] += 1
+            self.bp_dist.add(i, base_val, 1)
 
     fn tally_read(mut self, record: RecordCoord):
         if record.seq_len() > self.max_length:
             self.max_length = Int(record.seq_len())
-            var new_tensor = grow_matrix(
-                self.bp_dist, TensorShape(self.max_length, self.WIDTH)
+            var new_mat = grow_matrix(
+                self.bp_dist, self.max_length, self.WIDTH
             )
-            swap(self.bp_dist, new_tensor)
+            swap(self.bp_dist, new_mat)
 
         for i in range(Int(record.seq_len())):
-            # Remineder of first 5 bits seperates N from T
             var base_val = Int((record.SeqStr[i] & 0b11111) % self.WIDTH)
-            var index = VariadicList[Int](i, base_val)
-            self.bp_dist[index] += 1
+            self.bp_dist.add(i, base_val, 1)
 
     fn plot(
         self, total_reads: Int64
@@ -272,7 +268,7 @@ struct BasepairDistribution(Analyser):
         var mtp = Python.import_module("matplotlib")
         var np = Python.import_module("numpy")
         var arr = matrix_to_numpy(self.bp_dist)
-        bins = make_linear_base_groups(self.max_length)
+        var bins = make_linear_base_groups(self.max_length)
         arr, py_bins = bin_array(arr, bins, func="sum")
         arr = (np.divide(arr.T, arr.sum(axis=1)).T) * 100
 
@@ -347,12 +343,16 @@ struct BasepairDistribution(Analyser):
 # Done!
 @value
 struct CGContent(Analyser):
-    var cg_content: Tensor[DType.int64]
-    var theoritical_distribution: Tensor[DType.int64]
+    var cg_content: List[Int64]
+    var theoritical_distribution: List[Int64]
 
     fn __init__(out self):
-        self.cg_content = Tensor[DType.int64](101)
-        self.theoritical_distribution = Tensor[DType.int64](101)
+        self.cg_content = List[Int64](capacity=101)
+        for _ in range(101):
+            self.cg_content.append(0)
+        self.theoritical_distribution = List[Int64](capacity=101)
+        for _ in range(101):
+            self.theoritical_distribution.append(0)
 
     fn tally_read(mut self, record: FastqRecord):
         if record.len_record() == 0:
@@ -578,12 +578,12 @@ struct DupReads(Analyser):
 
         Python.add_to_path(py_lib.as_string_slice())
         var plt = Python.import_module("matplotlib.pyplot")
-        var arr = Tensor[DType.float64](total_percentages)
-        var new_arr = Tensor[DType.float64](arr.num_elements())
-        for i in range(arr.num_elements()):
-            new_arr[i] = (arr[i] / Float64(total_reads)) * Float64(100)
-        arr = new_arr
-        final_arr = tensor_to_numpy_1d(arr)
+        var new_arr = List[Float64](capacity=len(total_percentages))
+        for i in range(len(total_percentages)):
+            new_arr.append(
+                (total_percentages[i] / Float64(total_reads)) * Float64(100)
+            )
+        var final_arr = list_float64_to_numpy(new_arr)
         f = plt.subplots(figsize=(10, 6))
         fig = f[0]
         ax = f[1]
@@ -677,33 +677,27 @@ fn cmp_over_repr(
 
 @value
 struct LengthDistribution(Analyser):
-    var length_vector: Tensor[DType.int64]
+    var length_vector: List[Int64]
 
     fn __init__(out self):
-        self.length_vector = Tensor[DType.int64](0)
+        self.length_vector = List[Int64]()
 
     @always_inline
     fn tally_read(mut self, record: FastqRecord):
-        if record.len_record() > self.length_vector.num_elements():
-            var new_tensor = grow_tensor(
-                self.length_vector, record.len_record()
-            )
-            swap(self.length_vector, new_tensor)
+        while len(self.length_vector) < record.len_record():
+            self.length_vector.append(0)
         self.length_vector[record.len_record() - 1] += 1
 
     @always_inline
     fn tally_read(mut self, record: RecordCoord):
-        if record.seq_len() > self.length_vector.num_elements():
-            var new_tensor = grow_tensor(
-                self.length_vector, Int(record.seq_len())
-            )
-            swap(self.length_vector, new_tensor)
+        while len(self.length_vector) < Int(record.seq_len()):
+            self.length_vector.append(0)
         self.length_vector[Int(record.seq_len() - 1)] += 1
 
     @always_inline
     fn length_average(self, num_reads: Int) -> Float64:
         var cum: Int64 = 0
-        for i in range(self.length_vector.num_elements()):
+        for i in range(len(self.length_vector)):
             cum += self.length_vector[i] * (i + 1)
         return Int(cum) / num_reads
 
@@ -717,7 +711,7 @@ struct LengthDistribution(Analyser):
         while base > (max_val - min_val):
             base //= 10
 
-        divisions = List[Int](1, 2, 5)
+        var divisions: List[Int] = [1, 2, 5]
 
         while True:
             for d in divisions:
@@ -744,9 +738,9 @@ struct LengthDistribution(Analyser):
         var mtp = Python.import_module("matplotlib")
 
         var min_val: Int = 0
-        var max_val: Int = self.length_vector.num_elements()
+        var max_val: Int = len(self.length_vector)
 
-        for i in range(self.length_vector.num_elements()):
+        for i in range(len(self.length_vector)):
             if self.length_vector[i] > 0:
                 min_val = i
                 break
@@ -802,17 +796,17 @@ struct LengthDistribution(Analyser):
 
 @value
 struct QualityDistribution(Analyser):
-    var qu_dist: Tensor[DType.int64]
-    var qu_dist_seq: Tensor[DType.int64]
+    var qu_dist: Matrix2D
+    var qu_dist_seq: List[Int64]
     var max_length: Int
     var max_qu: UInt8
     var min_qu: UInt8
 
     fn __init__(out self):
-        shape = TensorShape(1, 128)
-        shape2 = TensorShape(128)
-        self.qu_dist = Tensor[DType.int64](shape)
-        self.qu_dist_seq = Tensor[DType.int64](shape2)
+        self.qu_dist = Matrix2D(1, 128)
+        self.qu_dist_seq = List[Int64](capacity=128)
+        for _ in range(128):
+            self.qu_dist_seq.append(0)
         self.max_length = 0
         self.max_qu = 0
         self.min_qu = 128
@@ -820,41 +814,44 @@ struct QualityDistribution(Analyser):
     fn tally_read(mut self, record: FastqRecord):
         if record.len_quality() > self.max_length:
             self.max_length = record.len_record()
-            new_shape = TensorShape(self.max_length, 128)
-            new_qu_dist = grow_matrix(self.qu_dist, new_shape)
+            var new_qu_dist = grow_matrix(self.qu_dist, self.max_length, 128)
             swap(self.qu_dist, new_qu_dist)
 
         for i in range(record.len_quality()):
-            base_qu = record.QuStr[i]
-            index = VariadicList[Int](i, Int(base_qu))
-            self.qu_dist[index] += 1
+            var base_qu = record.QuStr[i]
+            self.qu_dist.add(i, Int(base_qu), 1)
             if base_qu > self.max_qu:
                 self.max_qu = base_qu
             if base_qu < self.min_qu:
                 self.min_qu = base_qu
 
-        average = Int(sum_tensor(record.QuStr) / record.len_quality())
+        var qu_sum: Int = 0
+        for i in range(record.len_quality()):
+            qu_sum += Int(record.QuStr[i])
+        var average = Int(qu_sum / record.len_quality())
+        while len(self.qu_dist_seq) <= average:
+            self.qu_dist_seq.append(0)
         self.qu_dist_seq[average] += 1
 
     fn tally_read(mut self, record: RecordCoord):
         if record.qu_len() > self.max_length:
             self.max_length = Int(record.seq_len())
-            new_shape = TensorShape(self.max_length, 128)
-            new_qu_dist = grow_matrix(self.qu_dist, new_shape)
+            var new_qu_dist = grow_matrix(self.qu_dist, self.max_length, 128)
             swap(self.qu_dist, new_qu_dist)
 
         for i in range(Int(record.qu_len())):
-            base_qu = record.QuStr[i]
-            index = VariadicList[Int](i, Int(base_qu))
-            self.qu_dist[index] += 1
+            var base_qu = record.QuStr[i]
+            self.qu_dist.add(i, Int(base_qu), 1)
             if base_qu > self.max_qu:
                 self.max_qu = base_qu
             if base_qu < self.min_qu:
                 self.min_qu = base_qu
-        var sum: Int = 0
+        var qu_sum: Int = 0
         for i in range(Int(record.qu_len())):
-            sum += Int(record.QuStr[i])
-        average = Int(sum / record.qu_len())
+            qu_sum += Int(record.QuStr[i])
+        var average = Int(qu_sum / record.qu_len())
+        while len(self.qu_dist_seq) <= average:
+            self.qu_dist_seq.append(0)
         self.qu_dist_seq[average] += 1
 
     # Use this answer for plotting: https://stackoverflow.com/questions/58053594/how-to-create-a-boxplot-from-data-with-weights
@@ -931,7 +928,7 @@ struct QualityDistribution(Analyser):
 
         # Finding the last non-zero index
         index = 0
-        for i in range(self.qu_dist_seq.num_elements() - 1, -1, -1):
+        for i in range(len(self.qu_dist_seq) - 1, -1, -1):
             if self.qu_dist_seq[i] != 0:
                 index = i
                 break

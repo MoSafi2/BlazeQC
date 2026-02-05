@@ -1,20 +1,51 @@
-from python import PythonObject, Python
-from memory import UnsafePointer, memcpy
+"""BlazeQC helpers: matrix/list utilities, base grouping, quality schema, and Python/NumPy interop."""
 
-alias py_lib: String = "./.pixi/envs/default/lib/python3.12/site-packages/"
-alias Tensor[T: AnyTrivialRegType] = List[T]
+from python import PythonObject, Python
+
+comptime py_lib: String = "./.pixi/envs/default/lib/python3.12/site-packages/"
+
+# 2D matrix backed by a flat List[Int64] (row-major). Use List[Int64] for 1D data;
+# use LayoutTensor only when static shapes and kernel performance justify it.
+@fieldwise_init
+struct Matrix2D(Copyable & Movable):
+    var data: List[Int64]
+    var rows: Int
+    var cols: Int
+
+    fn __init__(out self, rows: Int, cols: Int):
+        self.rows = rows
+        self.cols = cols
+        self.data = List[Int64](capacity=rows * cols)
+        for _ in range(rows * cols):
+            self.data.append(0)
+
+    fn shape(self) -> Tuple[Int, Int]:
+        return (self.rows, self.cols)
+
+    fn _idx(self, i: Int, j: Int) -> Int:
+        return i * self.cols + j
+
+    fn get(self, i: Int, j: Int) -> Int64:
+        return self.data[self._idx(i, j)]
+
+    fn set(mut self, i: Int, j: Int, v: Int64):
+        self.data[self._idx(i, j)] = v
+
+    fn add(mut self, i: Int, j: Int, delta: Int64):
+        self.data[self._idx(i, j)] += delta
 
 fn encode_img_b64(fig: PythonObject) raises -> String:
-    Python.add_to_path(py_lib.as_string_slice())
-    py_io = Python.import_module("io")
-    py_base64 = Python.import_module("base64")
-    plt = Python.import_module("matplotlib.pyplot")
+    """Encode a matplotlib figure as a base64 PNG string."""
+    Python.add_to_path(StringSlice(py_lib))
+    var py_io = Python.import_module("io")
+    var py_base64 = Python.import_module("base64")
+    var plt = Python.import_module("matplotlib.pyplot")
 
-    buf = py_io.BytesIO()
+    var buf = py_io.BytesIO()
     plt.savefig(buf, format="png", dpi=150)
     buf.seek(0)
     plt.close()
-    base64_image = py_base64.b64encode(buf.read()).decode("utf-8")
+    var base64_image = py_base64.b64encode(buf.read()).decode("utf-8")
     buf.close()
 
     return String(base64_image)
@@ -25,7 +56,7 @@ fn encode_img_b64(fig: PythonObject) raises -> String:
 fn get_exp_interval(max_len: Int) -> List[Int]:
     var pos: Int = 1
     var interval: Int = 1
-    bins = List[Int]()
+    var bins = List[Int]()
     while pos <= max_len:
         if pos > max_len:
             pos = max_len
@@ -45,18 +76,18 @@ fn get_exp_interval(max_len: Int) -> List[Int]:
     if bins[-1] < max_len:
         bins.append(max_len)
 
-    return bins
+    return bins^
 
 
 # Ported from FastQC: https://github.com/s-andrews/FastQC/blob/1faeea0412093224d7f6a07f777fad60a5650795/uk/ac/babraham/FastQC/Graphs/BaseGroup.java
 fn get_linear_interval(length: Int) -> Int:
-    base_values = List[Int](2, 5, 10)
-    multiplier = 1
+    var base_values: List[Int] = [2, 5, 10]
+    var multiplier = 1
 
     while True:
         for base in base_values:
-            interval = base * multiplier
-            group_count = 9 + ((length - 9) // interval)
+            var interval = base * multiplier
+            var group_count = 9 + ((length - 9) // interval)
             if (length - 9) % interval != 0:
                 group_count += 1
 
@@ -73,28 +104,17 @@ fn make_ungrouped_groups(max_length: Int) -> List[Int]:
     var ungrouped_list = List[Int]()
     for i in range(1, max_length + 1):
         ungrouped_list.append(i)
-    return ungrouped_list
-
+    return ungrouped_list^
 
 fn make_linear_base_groups(max_length: Int) -> List[Int]:
     if max_length <= 75:
         return make_ungrouped_groups(max_length)
 
-    interval = get_linear_interval(max_length)
-    starting_base = 1
-    groups = List[Int]()
+    var interval = get_linear_interval(max_length)
+    var starting_base = 1
+    var groups = List[Int]()
 
     while starting_base <= max_length:
-        end_base = starting_base + (interval - 1)
-
-        if starting_base < 10:
-            end_base = starting_base
-        elif starting_base == 10 and interval > 10:
-            end_base = interval - 1
-
-        if end_base > max_length:
-            end_base = max_length
-
         groups.append(starting_base)
 
         if starting_base < 10:
@@ -104,25 +124,26 @@ fn make_linear_base_groups(max_length: Int) -> List[Int]:
         else:
             starting_base += interval
 
-    return groups
+    return groups^
 
 
 @always_inline
 fn bin_array(
     arr: PythonObject, bins: List[Int], func: String = "sum"
 ) raises -> Tuple[PythonObject, PythonObject]:
-    Python.add_to_path(py_lib.as_string_slice())
-    np = Python.import_module("numpy")
+    Python.add_to_path(StringSlice(py_lib))
+    var np = Python.import_module("numpy")
 
-    py_bins = Python.list()
+    var py_bins = Python.list()
     for i in bins:
         py_bins.append(i)
-    x = np.linspace(0, arr.shape[0], arr.shape[0])
-    binned_array = np.digitize(x, py_bins)
-    py_binned_slices = Python.list()
+    var x = np.linspace(0, arr.shape[0], arr.shape[0])
+    var binned_array = np.digitize(x, py_bins)
+    var py_binned_slices = Python.list()
     for i in range(len(bins)):
-        mask = np.equal(binned_array, i)
-        t1 = np.compress(mask, arr, axis=0)
+        var mask = np.equal(binned_array, i)
+        var t1 = np.compress(mask, arr, axis=0)
+        var t2: PythonObject
         if func == "mean":
             t2 = np.mean(t1, axis=0)
         elif func == "sum":
@@ -130,7 +151,7 @@ fn bin_array(
         else:
             t2 = t1
         py_binned_slices.append(t2)
-    new_arr = np.vstack(py_binned_slices)
+    var new_arr = np.vstack(py_binned_slices)
     return new_arr, py_bins
 
 
@@ -157,28 +178,21 @@ struct QualitySchema(Copyable & Movable, Stringable, Writable):
         writer.write(self.__str__())
 
     fn __str__(self) -> String:
-        return (
-            String("Quality schema: ")
-            + self.SCHEMA
-            + "\nLower: "
-            + String(self.LOWER)
-            + "\nUpper: "
-            + String(self.UPPER)
-            + "\nOffset: "
-            + String(self.OFFSET)
+        return "Quality schema: {}\nLower: {}\nUpper: {}\nOffset: {}".format(
+            self.SCHEMA, self.LOWER, self.UPPER, self.OFFSET
         )
 
 
 @always_inline
 fn base2int(byte: Byte) -> UInt8:
-    alias A_b = 65
-    alias a_b = 95
-    alias C_b = 67
-    alias c_b = 97
-    alias G_b = 71
-    alias g_b = 103
-    alias T_b = 84
-    alias t_b = 116
+    comptime A_b = 65
+    comptime a_b = 95
+    comptime C_b = 67
+    comptime c_b = 97
+    comptime G_b = 71
+    comptime g_b = 103
+    comptime T_b = 84
+    comptime t_b = 116
     if byte == A_b or byte == a_b:
         return 0
     if byte == C_b or byte == c_b:
@@ -193,70 +207,73 @@ fn base2int(byte: Byte) -> UInt8:
 # TODO: Make this also parametrized on the number of bits per bp
 fn _seq_to_hash(seq: String) -> UInt64:
     var hash = 0
-    for i in range(0, len(seq)):
-        # Remove the most signifcant 3 bits
+    var bytes = seq.as_bytes()
+    for i in range(len(bytes)):
+        # Remove the most significant 3 bits
         hash = hash & 0x1FFFFFFFFFFFFFFF
-        # Mask for the least sig. three bits, add to hash
-        var rem = ord(seq[i]) & 0b111
-        hash = (hash << 3) + Int(rem)
+        # Mask for the least significant three bits, add to hash
+        var rem = Int(bytes[i]) & 0b111
+        hash = (hash << 3) + rem
     return hash
 
 
-def tensor_to_numpy_1d[T: DType](tensor: Tensor[T]) -> PythonObject:
-    Python.add_to_path(py_lib.as_string_slice())
-    np = Python.import_module("numpy")
-    ar = np.zeros(tensor.num_elements())
-    for i in range(tensor.num_elements()):
-        ar.itemset(i, tensor[i])
-    return ar
+fn tensor_to_numpy_1d(ref data: List[Int64]) raises -> PythonObject:
+    """Convert a 1D List[Int64] to a NumPy array."""
+    Python.add_to_path(StringSlice(py_lib))
+    var np = Python.import_module("numpy")
+    var py_list = Python.list()
+    for val in data:
+        py_list.append(val)
+    return np.array(py_list)
 
 
-def matrix_to_numpy[T: DType](tensor: Tensor[T]) -> PythonObject:
-    np = Python.import_module("numpy")
-    ar = np.zeros([tensor.shape()[0], tensor.shape()[1]])
-    for i in range(tensor.shape()[0]):
-        for j in range(tensor.shape()[1]):
-            ar.itemset((i, j), tensor[i, j])
-    return ar
+fn list_float64_to_numpy(ref data: List[Float64]) raises -> PythonObject:
+    """Convert a List[Float64] to a NumPy float64 array."""
+    Python.add_to_path(StringSlice(py_lib))
+    var np = Python.import_module("numpy")
+    var py_list = Python.list()
+    for val in data:
+        py_list.append(val)
+    return np.array(py_list)
 
 
-fn grow_tensor[
-    T: DType,
-](old_tensor: Tensor[T], num_ele: Int) -> Tensor[T]:
-    var new_tensor = Tensor[T](num_ele)
-    cpy_tensor(new_tensor, old_tensor, old_tensor.num_elements(), 0, 0)
-    return new_tensor
+fn matrix_to_numpy(m: Matrix2D) raises -> PythonObject:
+    """Convert a Matrix2D to a NumPy 2D array."""
+    Python.add_to_path(StringSlice(py_lib))
+    var np = Python.import_module("numpy")
+    var py_rows = Python.list()
+    for i in range(m.rows):
+        var py_row = Python.list()
+        for j in range(m.cols):
+            py_row.append(m.get(i, j))
+        py_rows.append(py_row)
+    return np.array(py_rows)
 
 
-fn grow_matrix[
-    T: DType
-](old_tensor: Tensor[T], new_shape: TensorShape) -> Tensor[T]:
-    var new_tensor = Tensor[T](new_shape)
-    for i in range(old_tensor.shape()[0]):
-        for j in range(old_tensor.shape()[1]):
-            new_tensor[VariadicList(i, j)] = old_tensor[VariadicList(i, j)]
-    return new_tensor
+fn grow_tensor(old_list: List[Int64], new_size: Int) -> List[Int64]:
+    """Return a new list of length new_size with old data copied and remainder zero-filled."""
+    var new_list = List[Int64](capacity=new_size)
+    var old_len = len(old_list)
+    for i in range(new_size):
+        if i < old_len:
+            new_list.append(old_list[i])
+        else:
+            new_list.append(0)
+    return new_list^
 
 
-fn sum_tensor[T: DType](tensor: Tensor[T]) -> Int:
-    acc = 0
-    for i in range(tensor.num_elements()):
-        acc += Int(tensor[i])
+fn grow_matrix(old_mat: Matrix2D, new_rows: Int, new_cols: Int) -> Matrix2D:
+    """Return a new Matrix2D of shape (new_rows, new_cols) with old data copied; rest zero."""
+    var new_mat = Matrix2D(new_rows, new_cols)
+    for i in range(old_mat.rows):
+        for j in range(old_mat.cols):
+            new_mat.set(i, j, old_mat.get(i, j))
+    return new_mat^
+
+
+fn sum_tensor(list: List[Int64]) -> Int64:
+    """Sum all elements of a List[Int64]."""
+    var acc: Int64 = 0
+    for i in range(len(list)):
+        acc += list[i]
     return acc
-
-
-# The Function does not provide bounds checks on purpose, the bounds checks is the callers responsibility
-@always_inline
-fn cpy_tensor[
-    T: DType
-    # simd_width: Int
-](
-    mut dest: Tensor[T],
-    src: Tensor[T],
-    num_elements: Int,
-    dest_strt: Int = 0,
-    src_strt: Int = 0,
-):
-    var dest_ptr: UnsafePointer[Scalar[T]] = dest._ptr + dest_strt
-    var src_ptr: UnsafePointer[Scalar[T]] = src._ptr + src_strt
-    memcpy(dest_ptr, src_ptr, num_elements)
