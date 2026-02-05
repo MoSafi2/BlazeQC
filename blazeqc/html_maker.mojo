@@ -1,15 +1,9 @@
-import base64
-import python
-from python import PythonObject, Python
-from utils import Variant
-
-
-trait HTMLMaker(Copyable & Movable):
+trait HTMLMaker(Copyable):
     fn html_output(self) -> String:
         ...
 
 
-struct result_panel(Copyable & Movable):
+struct result_panel(Copyable):
     var name: String
     var grade: String
     var legand: String
@@ -77,8 +71,8 @@ fn _make_module_insert(panel: result_panel) raises -> String:
 @always_inline
 fn insert_to_summary(mut html: String, insert: String) -> String:
     var pos = html.find("</ul>", start=html.find("<ul>"))
-    first_part = html[:pos]
-    last_part = html[pos:]
+    var first_part = html[:pos]
+    var last_part = html[pos:]
     return first_part + insert + last_part
 
 
@@ -90,15 +84,15 @@ fn insert_module(mut html: String, insert: String) -> String:
     while html.find("</div>", start=pos) < end_tag:
         pos = html.find("</div>", start=pos) + 1
 
-    first_part = html[: pos - 1]
-    last_part = html[pos - 1 :]
+    var first_part = html[: pos - 1]
+    var last_part = html[pos - 1 :]
     return first_part + insert + last_part
 
 
 @always_inline
 fn insert_result_panel(mut html: String, result: result_panel) raises -> String:
-    summary = _make_summary_insert(result)
-    module = _make_module_insert(result)
+    var summary = _make_summary_insert(result)
+    var module = _make_module_insert(result)
 
     html = insert_to_summary(html, summary)
     html = insert_module(html, module)
@@ -116,7 +110,7 @@ fn _make_table(rows: String) raises -> String:
     return table_template.replace(String("<<rows>>"), rows)
 
 
-alias row_template: String = """
+comptime row_template: String = """
     <tr>
         <td>{}</td>
         <td>{}</td>
@@ -125,7 +119,7 @@ alias row_template: String = """
     </tr>
     """
 
-alias table_template: String = """
+comptime table_template: String = """
     <table>
     <thead>
         <tr>
@@ -144,8 +138,8 @@ alias table_template: String = """
 
 # Ported from FastQC: https://github.com/s-andrews/FastQC/blob/1faeea0412093224d7f6a07f777fad60a5650795/uk/ac/babraham/FastQC/Modules/BasicStats.java#L157
 fn format_length(original_length: Float64) -> String:
-    length = original_length
-    unit: StringSlice[StaticConstantOrigin] = " bp"
+    var length = original_length
+    var unit: StringSlice[StaticConstantOrigin] = " bp"
 
     if length >= 1000000000:
         length /= 1000000000
@@ -157,72 +151,29 @@ fn format_length(original_length: Float64) -> String:
         length /= 1000
         unit = " kbp"
 
-    chars = String(length)
+    var chars = String(length)
+    var dot_pos = chars.find(".")
+    var last_index: Int
+    if dot_pos >= 0:
+        last_index = dot_pos
+        # We keep the next char as well if they are non-zero numbers
+        if dot_pos + 1 < len(chars):
+            var next_slice = chars[dot_pos + 1 : dot_pos + 2]
+            if next_slice != "0":
+                last_index = dot_pos + 1
+            elif dot_pos > 0:
+                last_index = dot_pos - 1  # Lose the dot if next is zero
+        elif dot_pos > 0:
+            last_index = dot_pos - 1  # Lose the dot if it's the last character
+    else:
+        last_index = len(chars) - 1  # No dot: use whole string
 
-    last_index = 0
+    var final_chars = chars[: last_index + 1]
 
-    # Go through until we find a dot (if there is one)
-    for i in range(len(chars)):
-        last_index = i
-        if chars[i] == ".":
-            break
-
-    # We keep the next char as well if they are non-zero numbers
-    if last_index + 1 < len(chars) and chars[last_index + 1] != "0":
-        last_index += 1
-    elif last_index > 0 and chars[last_index] == ".":
-        last_index -= 1  # Lose the dot if it's the last character
-
-    final_chars = chars[: last_index + 1]  # Slice the list
-
-    return final_chars + unit  # Join the characters back into a string
+    return final_chars + unit
 
 
-alias html_template: String = """
-    <html>
-    <head>
-        <meta charset="utf-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-        <title><<filename>> - report</title>
-        <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css"
-            integrity="sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T" crossorigin="anonymous">
-        <link href="https://stackpath.bootstrapcdn.com/font-awesome/4.7.0/css/font-awesome.min.css" rel="stylesheet"
-            integrity="sha384-wvfXpqpZZVQGK6TAh5PVlGOfQNHSoD2xbE+QkPxCAFlNEevoEH3Sl0sibVcOQVnN" crossorigin="anonymous">
-        <style>
-        """ + style + """
-        </style>
-        <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
-    </head>
-
-    <body>
-        <div class="header">
-            <div id="header_title">Report</div>
-            <div id="header_filename">
-                <<date>><br />
-                <<filename>>
-            </div>
-        </div>
-        <div class="summary">
-            <h2>Summary</h2>
-            <ul>
-                <!-- Insert Point for Summary links -->
-            </ul>
-        </div>
-
-        <div class="main">
-            <!-- Insertion point for Images & Results -->
-        </div>
-
-        <div class="footer">BlazeQC<<BlazeQC_Version>></div>
-    </body>
-    <script src="https://code.jquery.com/jquery-3.3.1.slim.min.js" crossorigin="anonymous"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.7/umd/popper.min.js"
-        crossorigin="anonymous"></script>
-    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/js/bootstrap.min.js" crossorigin="anonymous"></script>
-    </html>
-            """
-
-alias style: String = """
+comptime style: String = """
             @media screen {
                 div.summary {
                     width: 18em;
@@ -410,3 +361,47 @@ alias style: String = """
                 color: #990000;
             }
                 """
+
+comptime html_template: String = """
+    <html>
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+        <title><<filename>> - report</title>
+        <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css"
+            integrity="sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T" crossorigin="anonymous">
+        <link href="https://stackpath.bootstrapcdn.com/font-awesome/4.7.0/css/font-awesome.min.css" rel="stylesheet"
+            integrity="sha384-wvfXpqpZZVQGK6TAh5PVlGOfQNHSoD2xbE+QkPxCAFlNEevoEH3Sl0sibVcOQVnN" crossorigin="anonymous">
+        <style>
+        """ + style + """
+        </style>
+        <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    </head>
+
+    <body>
+        <div class="header">
+            <div id="header_title">Report</div>
+            <div id="header_filename">
+                <<date>><br />
+                <<filename>>
+            </div>
+        </div>
+        <div class="summary">
+            <h2>Summary</h2>
+            <ul>
+                <!-- Insert Point for Summary links -->
+            </ul>
+        </div>
+
+        <div class="main">
+            <!-- Insertion point for Images & Results -->
+        </div>
+
+        <div class="footer">BlazeQC<<BlazeQC_Version>></div>
+    </body>
+    <script src="https://code.jquery.com/jquery-3.3.1.slim.min.js" crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.7/umd/popper.min.js"
+        crossorigin="anonymous"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/js/bootstrap.min.js" crossorigin="anonymous"></script>
+    </html>
+            """

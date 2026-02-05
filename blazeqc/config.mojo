@@ -5,14 +5,13 @@ from collections import Dict
 # TODO: Move those to a config file
 ##############
 fn hash_list() -> List[UInt64]:
-    var li: List[UInt64] = List[UInt64](
-        _seq_to_hash("AGATCGGAAGAG"),
-        _seq_to_hash("TGGAATTCTCGG"),
-        _seq_to_hash("GATCGTCGGACT"),
-        _seq_to_hash("CTGTCTCTTATA"),
-        _seq_to_hash("AAAAAAAAAAAA"),
-        _seq_to_hash("GGGGGGGGGGGG"),
-    )
+    li = List[UInt64](capacity=6)
+    li.append(_seq_to_hash("AGATCGGAAGAG"))
+    li.append(_seq_to_hash("TGGAATTCTCGG"))
+    li.append(_seq_to_hash("GATCGTCGGACT"))
+    li.append(_seq_to_hash("CTGTCTCTTATA"))
+    li.append(_seq_to_hash("AAAAAAAAAAAA"))
+    li.append(_seq_to_hash("GGGGGGGGGGGG"))
     return li^
 
 

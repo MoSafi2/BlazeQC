@@ -1,4 +1,5 @@
 from blazeseq.parser import RecordParser
+from blazeseq.iostream import FileReader
 from blazeqc.stats import FullStats
 from time import perf_counter_ns
 from sys import argv
@@ -8,8 +9,8 @@ from os import abort
 fn main() raises:
     args = argv()
 
-    var parser = RecordParser[validate_ascii=False, validate_quality=False](
-        String(args[1])
+    var parser = RecordParser[check_ascii=False, check_quality=False](
+        FileReader(String(args[1]))
     )
     var stats = FullStats()
 

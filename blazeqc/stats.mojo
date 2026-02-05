@@ -39,7 +39,7 @@ from blazeqc.config import hash_list, hash_names
 from blazeseq import FastqRecord, RecordCoord
 
 # TODO: Make this dynamic
-alias py_lib: String = ".pixi/envs/default/lib/python3.12/site-packages/"
+comptime py_lib: String = ".pixi/envs/default/lib/python3.12/site-packages/"
 
 
 trait Analyser(Movable & Copyable):
@@ -225,7 +225,7 @@ struct BasepairDistribution(Analyser):
     var bp_dist: Tensor[DType.int64]
     var max_length: Int
     var min_length: Int
-    alias WIDTH = 5
+    comptime WIDTH = 5
 
     fn __init__(out self):
         var shape = TensorShape(VariadicList[Int](1, self.WIDTH))
@@ -448,7 +448,7 @@ struct DupReads(Analyser):
     var count_at_max: Int
     var n: Int
     var corrected_counts: Dict[Int, Float64]
-    alias MAX_READS = 100_000
+    comptime MAX_READS = 100_000
 
     fn __init__(out self):
         self.unique_dict = Dict[String, Int](
@@ -968,8 +968,8 @@ struct QualityDistribution(Analyser):
         return result_1, result_2
 
     fn _guess_schema(self) -> QualitySchema:
-        alias SANGER_ENCODING_OFFSET = 33
-        alias ILLUMINA_1_3_ENCODING_OFFSET = 64
+        comptime SANGER_ENCODING_OFFSET = 33
+        comptime ILLUMINA_1_3_ENCODING_OFFSET = 64
 
         if self.min_qu < 64:
             return illumina_1_8_schema
@@ -1095,7 +1095,7 @@ struct PerTileQuality(Analyser):
     @always_inline
     fn _find_tile_info(self, record: FastqRecord) -> Int:
         header = record.get_header_string().as_bytes()
-        alias sep: UInt8 = ord(":")
+        comptime sep: UInt8 = ord(":")
         count = 0
         for i in range(len(header)):
             if header[i] == sep:
@@ -1111,7 +1111,7 @@ struct PerTileQuality(Analyser):
 
     @always_inline
     fn _find_tile_value(self, record: FastqRecord, pos: Int) -> Int:
-        alias sep: UInt8 = ord(":")
+        comptime sep: UInt8 = ord(":")
         var index_1 = 0
         var index_2 = 0
         var count = 0
@@ -1149,8 +1149,8 @@ struct KmerContent[KMERSIZE: Int]:
 
     @always_inline
     fn tally_read(mut self, record: FastqRecord, read_num: Int64):
-        alias N_b = ord("N")
-        alias n_b = ord("n")
+        comptime N_b = ord("N")
+        comptime n_b = ord("n")
 
         if read_num % 50 != 0:
             return
