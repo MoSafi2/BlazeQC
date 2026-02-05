@@ -1,6 +1,7 @@
 """BlazeQC helpers: matrix/list utilities, base grouping, quality schema, and Python/NumPy interop."""
 
 from python import PythonObject, Python
+from utils import Index
 
 comptime py_lib: String = "./.pixi/envs/default/lib/python3.12/site-packages/"
 
