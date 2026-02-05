@@ -22,8 +22,7 @@ from blazeqc.CONSTS import (
 from blazeqc.html_maker import result_panel
 
 
-@value
-struct QualityDistribution(Analyser):
+struct QualityDistribution(Analyser, Copyable, Movable):
     var qu_dist: Matrix2D
     var qu_dist_seq: List[Int64]
     var max_length: Int
@@ -40,12 +39,12 @@ struct QualityDistribution(Analyser):
         self.min_qu = 128
 
     fn tally_read(mut self, record: FastqRecord):
-        if record.len_quality() > self.max_length:
-            self.max_length = record.len_record()
+        if len(record) > self.max_length:
+            self.max_length = len(record)
             var new_qu_dist = grow_matrix(self.qu_dist, self.max_length, 128)
             swap(self.qu_dist, new_qu_dist)
 
-        for i in range(record.len_quality()):
+        for i in range(len(record)):
             var base_qu = record.QuStr[i]
             self.qu_dist.add(i, Int(base_qu), 1)
             if base_qu > self.max_qu:
@@ -54,9 +53,9 @@ struct QualityDistribution(Analyser):
                 self.min_qu = base_qu
 
         var qu_sum: Int = 0
-        for i in range(record.len_quality()):
+        for i in range(len(record)):
             qu_sum += Int(record.QuStr[i])
-        var average = Int(qu_sum / record.len_quality())
+        var average = Int(qu_sum / len(record))
         while len(self.qu_dist_seq) <= average:
             self.qu_dist_seq.append(0)
         self.qu_dist_seq[average] += 1
@@ -86,24 +85,24 @@ struct QualityDistribution(Analyser):
     fn slice_array(
         self, arr: PythonObject, min_index: Int, max_index: Int
     ) raises -> PythonObject:
-        np = Python.import_module("numpy")
+        var np = Python.import_module("numpy")
         indices = np.arange(min_index, max_index)
         return np.take(arr, indices, axis=1)
 
     fn plot(self) raises -> Tuple[PythonObject, PythonObject]:
         Python.add_to_path(py_lib.as_string_slice())
-        np = Python.import_module("numpy")
-        plt = Python.import_module("matplotlib.pyplot")
-        mtp = Python.import_module("matplotlib")
+        var np = Python.import_module("numpy")
+        var plt = Python.import_module("matplotlib.pyplot")
+        var mtp = Python.import_module("matplotlib")
 
-        schema = self._guess_schema()
-        arr = matrix_to_numpy(self.qu_dist)
-        min_index = schema.OFFSET
-        max_index = max(40, self.max_qu)
+        var schema = self._guess_schema()
+        var arr = matrix_to_numpy(self.qu_dist)
+        var min_index = schema.OFFSET
+        var max_index = max(40, self.max_qu)
         arr = self.slice_array(arr, Int(min_index), Int(max_index))
         # Convert the raw array to binned array to account for very long seqs.
         var bins = make_linear_base_groups(arr.shape[0])
-        arr, py_bins = bin_array(arr, bins, func="mean")
+        arr, var py_bins = bin_array(arr, bins, func="mean")
 
         ################ Quality Boxplot ##################
 
@@ -197,11 +196,11 @@ struct QualityDistribution(Analyser):
         comptime ILLUMINA_1_3_ENCODING_OFFSET = 64
 
         if self.min_qu < 64:
-            return illumina_1_8_schema
+            return materialize(illumina_1_8_schema)
         elif self.min_qu == ILLUMINA_1_3_ENCODING_OFFSET + 1:
-            return illumina_1_3_schema
+            return materialize(illumina_1_3_schema)
         elif self.min_qu <= 126:
-            return illumina_1_5_schema
+            return materialize(illumina_1_5_schema)
         else:
             print("Unable to parse Quality Schema, returning generic schema")
-            return generic_schema
+            return materialize(generic_schema)

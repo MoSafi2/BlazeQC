@@ -1,6 +1,6 @@
 """Per-tile quality (split from stats_.mojo)."""
 
-from collections.dict import DictEntry, Dict
+from collections.dict import DictEntry, Dict, default_hasher
 from python import Python, PythonObject
 from blazeseq import FastqRecord
 from blazeqc.stats.analyser import Analyser, py_lib
@@ -8,8 +8,7 @@ from blazeqc.helpers import tensor_to_numpy_1d, encode_img_b64, grow_tensor
 from blazeqc.html_maker import result_panel
 
 
-@value
-struct TileQualityEntry:
+struct TileQualityEntry(Copyable, Movable):
     var tile: Int
     var count: Int
     var quality: List[Int64]
@@ -21,7 +20,7 @@ struct TileQualityEntry:
         for _ in range(length):
             self.quality.append(0)
 
-    fn __hash__(self) -> Int:
+    fn __hash__(self) -> UInt64:
         return hash(self.tile)
 
     fn __add__(self, other: Int) -> Int:
@@ -31,8 +30,7 @@ struct TileQualityEntry:
         self.count += other
 
 
-@value
-struct PerTileQuality(Analyser):
+struct PerTileQuality(Analyser, Copyable, Movable):
     var n: Int
     var map: Dict[Int, TileQualityEntry]
     var max_length: Int
@@ -57,28 +55,30 @@ struct PerTileQuality(Analyser):
         # Low-level access to the hashmap to avoid the overhead of calling `_find_index` multiple times.
         # Should be replcaed with a cleaner version once Mojo dict is more performant.
 
-        index = self.map._find_index(val.__hash__(), val)
+        index = self.map._find_index(hash(val), val)
 
         if index[0]:
             pos = index[2]
             entry = self.map._entries[pos]
-            deref_value = entry.unsafe_value().value
+            var deref_value = entry.unsafe_value().value.copy()
             deref_value.count += 1
-            if len(deref_value.quality) < record.len_record():
-                deref_value.quality = grow_tensor(deref_value.quality, record.len_record())
+            if len(deref_value.quality) < len(record):
+                deref_value.quality = grow_tensor(
+                    deref_value.quality, len(record)
+                )
 
-            for i in range(record.len_record()):
+            for i in range(len(record)):
                 deref_value.quality[i] += Int(record.QuStr[i])
 
-            self.map._entries[pos] = DictEntry[Int, TileQualityEntry](
-                entry.unsafe_take().key, deref_value
-            )
+            self.map._entries[pos] = DictEntry[
+                Int, TileQualityEntry, default_hasher
+            ](val, deref_value^)
 
         else:
-            self.map[val] = TileQualityEntry(val, 1, record.len_record())
+            self.map[val] = TileQualityEntry(val, 1, len(record))
 
-        if self.max_length < record.len_record():
-            self.max_length = record.len_record()
+        if self.max_length < len(record):
+            self.max_length = len(record)
 
     # TODO: Construct a n_keys*max_length array to hold all information.
     fn plot(self) raises -> PythonObject:
@@ -93,12 +93,12 @@ struct PerTileQuality(Analyser):
 
         arr = np.zeros(self.max_length)
         for i in self.map.keys():
-            temp_arr = tensor_to_numpy_1d(self.map[i[]].quality)
-            arr = np.vstack((arr, temp_arr))
+            temp_arr = tensor_to_numpy_1d(self.map[i].quality)
+            arr = np.vstack(Python.tuple(arr, temp_arr))
 
         var ks = Python.list()
         for i in self.map.keys():
-            ks.append(i[])
+            ks.append(i)
         sns.heatmap(arr[1:,], cmap="Blues_r", yticklabels=ks, ax=ax)
         ax.set_title("Quality per tile")
         ax.set_xlabel("Position in read (bp)")
@@ -114,7 +114,7 @@ struct PerTileQuality(Analyser):
             "Quality per tile",
             encoded_fig1,
         )
-        return result_1
+        return result_1^
 
     # TODO: This function should return tile information
     @always_inline

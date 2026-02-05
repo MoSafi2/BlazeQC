@@ -9,8 +9,7 @@ from blazeqc.helpers import base2int, grow_tensor, Matrix2D, matrix_to_numpy
 
 
 # TODO: Test if rolling hash function with power of two modulu's would work.
-@value
-struct KmerContent[KMERSIZE: Int]:
+struct KmerContent[KMERSIZE: Int](Copyable, Movable):
     var kmers: List[List[Int64]]
     var max_length: Int
 
@@ -40,7 +39,7 @@ struct KmerContent[KMERSIZE: Int]:
 
         var s = record.get_seq().as_bytes()
         # INFO: As per FastQC: limit the Kmers to the first 500 BP for long reads
-        for i in range(min(record.len_record(), 500) - KMERSIZE):
+        for i in range(min(len(record), 500) - KMERSIZE):
             var kmer = s[i : i + KMERSIZE]
             var contains_n = False
             # TODO: Check how this optimized in Cpp

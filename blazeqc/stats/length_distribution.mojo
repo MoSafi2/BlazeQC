@@ -7,8 +7,7 @@ from blazeqc.helpers import tensor_to_numpy_1d, bin_array, encode_img_b64
 from blazeqc.html_maker import result_panel
 
 
-@value
-struct LengthDistribution(Analyser):
+struct LengthDistribution(Analyser, Copyable, Movable):
     var length_vector: List[Int64]
 
     fn __init__(out self):
@@ -16,9 +15,9 @@ struct LengthDistribution(Analyser):
 
     @always_inline
     fn tally_read(mut self, record: FastqRecord):
-        while len(self.length_vector) < record.len_record():
+        while len(self.length_vector) < len(record):
             self.length_vector.append(0)
-        self.length_vector[record.len_record() - 1] += 1
+        self.length_vector[len(record) - 1] += 1
 
     @always_inline
     fn tally_read(mut self, record: RecordCoord):
@@ -47,7 +46,7 @@ struct LengthDistribution(Analyser):
 
         while True:
             for d in divisions:
-                tester = base * d[]
+                tester = base * d
                 if (max_val - min_val) / tester <= 50:
                     interval = tester
                     break

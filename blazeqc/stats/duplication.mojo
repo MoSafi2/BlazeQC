@@ -9,8 +9,7 @@ from blazeqc.helpers import list_float64_to_numpy, encode_img_b64
 from blazeqc.html_maker import result_panel, _make_row, _make_table
 
 
-@value
-struct DupReads(Analyser):
+struct DupReads(Analyser, Copyable, Movable):
     var unique_dict: Dict[String, Int]
     var unique_reads: Int
     var count_at_max: Int
@@ -30,7 +29,7 @@ struct DupReads(Analyser):
     # TODO: Check if the Stringslice to String Conversion is right
     fn tally_read(mut self, record: FastqRecord):
         self.n += 1
-        read_len = min(record.len_record(), 50)
+        read_len = min(len(record), 50)
         var s: String
         try:
             s = String(record.get_seq()[0:read_len])
@@ -57,20 +56,20 @@ struct DupReads(Analyser):
         # Construct Duplication levels dict
         var dup_dict = Dict[Int, Int]()
         for entry in self.unique_dict.items():
-            if Int(entry[].value) in dup_dict:
+            if Int(entry.value) in dup_dict:
                 try:
-                    dup_dict[Int(entry[].value)] += 1
+                    dup_dict[Int(entry.value)] += 1
                 except error:
                     print(error)
             else:
-                dup_dict[Int(entry[].value)] = 1
+                dup_dict[Int(entry.value)] = 1
 
         # Correct reads levels
         var corrected_reads = Dict[Int, Float64]()
         for entry in dup_dict:
             try:
-                var count = dup_dict[entry[]]
-                var level = entry[]
+                var count = dup_dict[entry]
+                var level = entry
                 var corrected_count = self.correct_values(
                     level, count, self.count_at_max, self.n
                 )
@@ -122,8 +121,8 @@ struct DupReads(Analyser):
         var dedup_total: Float64 = 0
         var raw_total: Float64 = 0
         for entry in self.corrected_counts.items():
-            var count = entry[].value
-            var dup_level = entry[].key
+            var count = entry.value
+            var dup_level = entry.key
             dedup_total += count
             raw_total += count * dup_level
             dup_slot = min(max(dup_level - 1, 0), 15)
@@ -188,11 +187,11 @@ struct DupReads(Analyser):
         # TODO: Check also those over-representing stuff against the contaimination list.
         overrepresented_seqs = List[OverRepresentedSequence]()
         for key in self.unique_dict.items():
-            seq_precent = (key[].value / self.n) * 100
+            seq_precent = (key.value / self.n) * 100
             if seq_precent > 0.1:
                 overrepresented_seqs.append(
                     OverRepresentedSequence(
-                        key[].key, key[].value, seq_precent, String("No Hit")
+                        key.key, key.value, seq_precent, String("No Hit")
                     )
                 )
 

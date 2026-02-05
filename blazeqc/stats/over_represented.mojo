@@ -1,7 +1,6 @@
 """Over-represented sequence (split from stats_.mojo)."""
 
-@value
-struct OverRepresentedSequence:
+struct OverRepresentedSequence(Copyable, Movable):
     var seq: String
     var count: Int
     var percentage: Float64

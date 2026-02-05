@@ -8,8 +8,7 @@ from blazeqc.html_maker import result_panel
 
 
 # Done!
-@value
-struct CGContent(Analyser):
+struct CGContent(Analyser, Copyable, Movable):
     var cg_content: List[Int64]
     var theoritical_distribution: List[Int64]
 
@@ -22,12 +21,12 @@ struct CGContent(Analyser):
             self.theoritical_distribution.append(0)
 
     fn tally_read(mut self, record: FastqRecord):
-        if record.len_record() == 0:
+        if len(record) == 0:
             return
 
         var cg_num = 0
 
-        for index in range(0, record.len_record()):
+        for index in range(0, len(record)):
             if (
                 record.SeqStr[index] & 0b111 == 3
                 or record.SeqStr[index] & 0b111 == 7
@@ -35,7 +34,7 @@ struct CGContent(Analyser):
                 cg_num += 1
 
         var read_cg_content = Int(
-            round(cg_num * 100 / Int(record.len_record()))
+            round(cg_num * 100 / Int(len(record)))
         )
         self.cg_content[read_cg_content] += 1
 
@@ -56,7 +55,7 @@ struct CGContent(Analyser):
 
     # TODO: Convert as much as possible away from numpy
     fn calculate_theoritical_distribution(self) raises -> PythonObject:
-        np = Python.import_module("numpy")
+        var np = Python.import_module("numpy")
         sc = Python.import_module("scipy")
         var arr = tensor_to_numpy_1d(self.cg_content)
         var total_counts = np.sum(arr)
