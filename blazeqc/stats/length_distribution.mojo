@@ -122,4 +122,4 @@ struct LengthDistribution(Analyser, Copyable, Movable):
             encoded_fig1,
         )
 
-        return result_1
+        return result_1^

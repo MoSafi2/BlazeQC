@@ -98,27 +98,35 @@ struct QualityDistribution(Analyser, Copyable, Movable):
         var schema = self._guess_schema()
         var arr = matrix_to_numpy(self.qu_dist)
         var min_index = schema.OFFSET
-        var max_index = max(40, self.max_qu)
+        var max_qu_int = Int(self.max_qu)
+        var max_index = 40 if 40 > max_qu_int else max_qu_int
         arr = self.slice_array(arr, Int(min_index), Int(max_index))
         # Convert the raw array to binned array to account for very long seqs.
-        var bins = make_linear_base_groups(arr.shape[0])
-        arr, var py_bins = bin_array(arr, bins, func="mean")
+        var bins = make_linear_base_groups(self.max_length)
+        var py_bins: PythonObject
+        arr, py_bins = bin_array(arr, bins, func="mean")
 
         ################ Quality Boxplot ##################
 
         # TODO: Convert as much as possible away from numpy
+        var nrows = Int(py=arr.shape[0])
+        var ncols = Int(py=arr.shape[1])
         mean_line = np.sum(
-            arr * np.arange(1, arr.shape[1] + 1), axis=1
+            arr * np.arange(1, ncols + 1), axis=1
         ) / np.sum(arr, axis=1)
         cum_sum = np.cumsum(arr, axis=1)
-        total_counts = np.reshape(np.sum(arr, axis=1), (len(arr), 1))
+        total_counts = np.reshape(np.sum(arr, axis=1), Python.tuple(nrows, 1))
         median = np.argmax(cum_sum > total_counts / 2, axis=1)
         Q75 = np.argmax(cum_sum > total_counts * 0.75, axis=1)
         Q25 = np.argmax(cum_sum > total_counts * 0.25, axis=1)
         IQR = Q75 - Q25
 
-        whislo = np.full(len(IQR), None)
-        whishi = np.full(len(IQR), None)
+        # Get Python None via getattr(builtins, "None") for boxplot default whiskers
+        var builtins = Python.import_module("builtins")
+        var getattr_fn = builtins.get("getattr")
+        var py_none = getattr_fn(builtins, "None")
+        whislo = np.full(len(IQR), py_none)
+        whishi = np.full(len(IQR), py_none)
 
         x = plt.subplots()
         fig = x[0]
@@ -189,18 +197,18 @@ struct QualityDistribution(Analyser, Copyable, Movable):
             encoded_fig2,
         )
 
-        return result_1, result_2
+        return (result_1^, result_2^)
 
     fn _guess_schema(self) -> QualitySchema:
         comptime SANGER_ENCODING_OFFSET = 33
         comptime ILLUMINA_1_3_ENCODING_OFFSET = 64
 
         if self.min_qu < 64:
-            return materialize(illumina_1_8_schema)
+            return QualitySchema("Illumina v1.8", 33, 126, 33)
         elif self.min_qu == ILLUMINA_1_3_ENCODING_OFFSET + 1:
-            return materialize(illumina_1_3_schema)
+            return QualitySchema("Illumina v1.3", 64, 126, 64)
         elif self.min_qu <= 126:
-            return materialize(illumina_1_5_schema)
+            return QualitySchema("Illumina v1.5", 66, 126, 64)
         else:
             print("Unable to parse Quality Schema, returning generic schema")
-            return materialize(generic_schema)
+            return QualitySchema("Generic", 33, 126, 33)

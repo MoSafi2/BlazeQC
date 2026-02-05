@@ -19,7 +19,7 @@ from blazeqc.html_maker import (
 )
 
 
-@value
+@fieldwise_init
 struct FullStats(Movable & Copyable):
     var num_reads: Int64
     var total_bases: Int64
@@ -29,7 +29,7 @@ struct FullStats(Movable & Copyable):
     var cg_content: CGContent
     var dup_reads: DupReads
     var tile_qual: PerTileQuality
-    var adpt_cont: AdapterContent
+    var adpt_cont: AdapterContent[3]
 
     fn __init__(out self):
         self.num_reads = 0
@@ -40,12 +40,12 @@ struct FullStats(Movable & Copyable):
         self.qu_dist = QualityDistribution()
         self.dup_reads = DupReads()
         self.tile_qual = PerTileQuality()
-        self.adpt_cont = AdapterContent(hash_list(), 12)
+        self.adpt_cont = AdapterContent[bits=3](hash_list(), 12)
 
     @always_inline
     fn tally(mut self, record: FastqRecord):
         self.num_reads += 1
-        self.total_bases += record.len_record()
+        self.total_bases += len(record)
         self.bp_dist.tally_read(record)
         self.len_dist.tally_read(record)
         self.cg_content.tally_read(record)  # Almost Free
@@ -72,7 +72,7 @@ struct FullStats(Movable & Copyable):
         var avg_cg = (sum / self.num_reads)
         var schema = self.qu_dist._guess_schema()
 
-        total_bases = format_length(Float64(self.total_bases))
+        var total_bases = format_length(Float64(self.total_bases))
 
         var lengths: String
         if self.bp_dist.max_length == self.bp_dist.min_length:
@@ -130,56 +130,53 @@ struct FullStats(Movable & Copyable):
             table_template,
             panel_type="table",
         )
-        return res
+        return res^
 
     @always_inline
     fn plot(mut self) raises -> List[PythonObject]:
-        plots = List[PythonObject]()
+        var plots = List[PythonObject]()
 
-        img1, img2 = self.bp_dist.plot(self.num_reads)
-        plots.append(img1)
-        plots.append(img2)
+        var bp_plots = self.bp_dist.plot(self.num_reads)
+        plots.append(bp_plots[0])
+        plots.append(bp_plots[1])
         plots.append(self.cg_content.plot())
         plots.append(self.len_dist.plot())
-        img, _ = self.dup_reads.plot(Int(self.num_reads))
-        plots.append(img)
-        img1, img2 = self.qu_dist.plot()
-        plots.append(img1)
-        plots.append(img2)
+        var dup_plot_result = self.dup_reads.plot(Int(self.num_reads))
+        plots.append(dup_plot_result[0])
+        var qu_plots = self.qu_dist.plot()
+        plots.append(qu_plots[0])
+        plots.append(qu_plots[1])
         plots.append(self.tile_qual.plot())
         plots.append(self.adpt_cont.plot(self.num_reads))
 
-        return plots
+        return plots^
 
     fn make_html(mut self, file_name: String) raises:
         Python.add_to_path(py_lib.as_string_slice())
 
-        py_dt = Python.import_module("datetime")
-        dt_now = py_dt.datetime.now().strftime("%a %d %b %Y")
+        var py_dt = Python.import_module("datetime")
+        var dt_now = py_dt.datetime.now().strftime("%a %d %b %Y")
 
         var results = List[result_panel]()
         results.append(self.make_base_stats())
-        res1, res2 = self.qu_dist.make_html()
-        results.append(res2)
-        results.append(res1)
+        var qu_html = self.qu_dist.make_html()
+        results.append(qu_html[0].copy())
+        results.append(qu_html[1].copy())
 
-        n_dist, bp_dist = self.bp_dist.make_html(self.num_reads)
-
-        results.append(bp_dist)
+        var bp_html = self.bp_dist.make_html(self.num_reads)
+        results.append(bp_html[1].copy())
         results.append(self.cg_content.make_html())
-        results.append(n_dist)
+        results.append(bp_html[0].copy())
         results.append(self.len_dist.make_html())
-        dup_reads, over_represented = self.dup_reads.make_html(
-            Int(self.num_reads)
-        )
-        results.append(dup_reads)
-        results.append(over_represented)
+        var dup_html = self.dup_reads.make_html(Int(self.num_reads))
+        results.append(dup_html[0].copy())
+        results.append(dup_html[1].copy())
         results.append(self.tile_qual.make_html())
         results.append(self.adpt_cont.make_html(self.num_reads))
 
         var html: String = html_template
         for entry in results:
-            html = insert_result_panel(html, entry[])
+            html = insert_result_panel(html, entry)
 
         while html.find("<<filename>>") > -1:
             html = html.replace("<<filename>>", file_name)
