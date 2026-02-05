@@ -46,7 +46,7 @@ python = ">=3.14.0,<3.15"
 blazeseq = { git = "https://github.com/MoSafi2/BlazeSeq", branch = "gpu_support" }
 
 [tasks]
-test = "mojo run tests/test_helpers.mojo"
+test = "mojo run -I BlazeQC.mojopkg -D ASSERT=all tests/test_helpers.mojo && mojo run -I BlazeQC.mojopkg -D ASSERT=all tests/test_helpers_python.mojo"
 build = "mojo package blazeqc -o BlazeQC.mojopkg"
 t = { cmd = "sh -c 'find ./tests -name test_*.mojo | xargs -I % mojo test -I BlazeQC.mojopkg -D ASSERT=all %'", depends-on = ["build"] }
 rbuild = "pixi build"

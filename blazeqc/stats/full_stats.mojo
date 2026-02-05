@@ -20,7 +20,7 @@ from blazeqc.html_maker import (
 
 
 @fieldwise_init
-struct FullStats(Movable & Copyable):
+struct FullStats(Copyable):
     var num_reads: Int64
     var total_bases: Int64
     var bp_dist: BasepairDistribution
@@ -43,7 +43,9 @@ struct FullStats(Movable & Copyable):
         self.adpt_cont = AdapterContent[bits=3](hash_list(), 12)
 
     @always_inline
-    fn tally(mut self, record: FastqRecord):
+    fn tally[
+        check_quality: Bool = True
+    ](mut self, record: FastqRecord[val=check_quality]):
         self.num_reads += 1
         self.total_bases += len(record)
         self.bp_dist.tally_read(record)
@@ -69,7 +71,7 @@ struct FullStats(Movable & Copyable):
         var sum: Int64 = 0
         for i in range(len(self.cg_content.cg_content)):
             sum += self.cg_content.cg_content[i] * i
-        var avg_cg = (sum / self.num_reads)
+        var avg_cg = sum / self.num_reads
         var schema = self.qu_dist._guess_schema()
 
         var total_bases = format_length(Float64(self.total_bases))
