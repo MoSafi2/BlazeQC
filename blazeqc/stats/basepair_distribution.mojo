@@ -15,8 +15,8 @@ from blazeqc.helpers import (
 from blazeqc.html_maker import result_panel
 
 
-@value
-struct BasepairDistribution(Analyser):
+@fieldwise_init
+struct BasepairDistribution(Analyser, Movable):
     var bp_dist: Matrix2D
     var max_length: Int
     var min_length: Int
@@ -28,17 +28,18 @@ struct BasepairDistribution(Analyser):
         self.min_length = Int.MAX
 
     fn tally_read(mut self, record: FastqRecord):
-        if record.len_record() > self.max_length:
-            self.max_length = record.len_record()
+        var rec_len = len(record)
+        if rec_len > self.max_length:
+            self.max_length = rec_len
             var new_mat = grow_matrix(
                 self.bp_dist, self.max_length, self.WIDTH
             )
             swap(self.bp_dist, new_mat)
 
-        if record.len_record() < self.min_length:
-            self.min_length = record.len_record()
+        if rec_len < self.min_length:
+            self.min_length = rec_len
 
-        for i in range(record.len_record()):
+        for i in range(rec_len):
             var base_val = Int((record.SeqStr[i] & 0b11111) % self.WIDTH)
             self.bp_dist.add(i, base_val, 1)
 
@@ -83,7 +84,12 @@ struct BasepairDistribution(Analyser):
         ax.xaxis.set_major_locator(
             mtp.ticker.MaxNLocator(integer=True, nbins=15)
         )
-        ax.set_label(["%T", "%A", "%G", "%C"])
+        var legend_labels = Python.list()
+        legend_labels.append("%C")
+        legend_labels.append("%G")
+        legend_labels.append("%T")
+        legend_labels.append("%A")
+        ax.legend(legend_labels)
         ax.set_xlabel("Position in read (bp)")
         ax.set_title("Base Distribution")
 
@@ -102,7 +108,9 @@ struct BasepairDistribution(Analyser):
             mtp.ticker.MaxNLocator(integer=True, nbins=15)
         )
         ax2.set_ylim(0, 100)
-        ax2.set_label(["%N"])
+        var legend_labels_n = Python.list()
+        legend_labels_n.append("%N")
+        ax2.legend(legend_labels_n)
         ax2.set_xlabel("Position in read (bp)")
         ax2.set_title("N percentage")
 
@@ -131,4 +139,4 @@ struct BasepairDistribution(Analyser):
             encoded_fig2,
         )
 
-        return result_1, result_2
+        return (result_1^, result_2^)

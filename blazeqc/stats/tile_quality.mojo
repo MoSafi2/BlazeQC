@@ -4,7 +4,7 @@ from collections.dict import DictEntry, Dict
 from python import Python, PythonObject
 from blazeseq import FastqRecord
 from blazeqc.stats.analyser import Analyser, py_lib
-from blazeqc.helpers import tensor_to_numpy_1d, encode_img_b64
+from blazeqc.helpers import tensor_to_numpy_1d, encode_img_b64, grow_tensor
 from blazeqc.html_maker import result_panel
 
 
@@ -12,12 +12,14 @@ from blazeqc.html_maker import result_panel
 struct TileQualityEntry:
     var tile: Int
     var count: Int
-    var quality: Tensor[DType.int64]
+    var quality: List[Int64]
 
     fn __init__(out self, tile: Int, count: Int, length: Int):
         self.tile = tile
         self.count = count
-        self.quality = Tensor[DType.int64](TensorShape(length))
+        self.quality = List[Int64](capacity=length)
+        for _ in range(length):
+            self.quality.append(0)
 
     fn __hash__(self) -> Int:
         return hash(self.tile)
@@ -62,11 +64,8 @@ struct PerTileQuality(Analyser):
             entry = self.map._entries[pos]
             deref_value = entry.unsafe_value().value
             deref_value.count += 1
-            if deref_value.quality.num_elements() < record.len_record():
-                new_tensor = Tensor[DType.int64](record.len_record())
-                for i in range(deref_value.quality.num_elements()):
-                    new_tensor[i] = deref_value.quality[i]
-                deref_value.quality = new_tensor
+            if len(deref_value.quality) < record.len_record():
+                deref_value.quality = grow_tensor(deref_value.quality, record.len_record())
 
             for i in range(record.len_record()):
                 deref_value.quality[i] += Int(record.QuStr[i])

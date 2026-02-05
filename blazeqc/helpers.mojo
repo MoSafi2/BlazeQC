@@ -1,12 +1,12 @@
 """BlazeQC helpers: matrix/list utilities, base grouping, quality schema, and Python/NumPy interop."""
 
 from python import PythonObject, Python
-from utils import Index
+from utils import Index, IndexList
 
 comptime py_lib: String = "./.pixi/envs/default/lib/python3.12/site-packages/"
 
-# 2D matrix backed by a flat List[Int64] (row-major). Use List[Int64] for 1D data;
-# use LayoutTensor only when static shapes and kernel performance justify it.
+# 2D matrix backed by a flat List[Int64] (row-major). Preferred 2D replacement for
+# Tensor in this codebase; use List[Int64] for 1D data.
 @fieldwise_init
 struct Matrix2D(Copyable & Movable):
     var data: List[Int64]
@@ -23,6 +23,9 @@ struct Matrix2D(Copyable & Movable):
     fn shape(self) -> Tuple[Int, Int]:
         return (self.rows, self.cols)
 
+    fn num_elements(self) -> Int:
+        return self.rows * self.cols
+
     fn _idx(self, i: Int, j: Int) -> Int:
         return i * self.cols + j
 
@@ -34,6 +37,12 @@ struct Matrix2D(Copyable & Movable):
 
     fn add(mut self, i: Int, j: Int, delta: Int64):
         self.data[self._idx(i, j)] += delta
+
+    fn __getitem__(self, index: IndexList[2]) -> Int64:
+        return self.get(index[0], index[1])
+
+    fn __setitem__(mut self, index: IndexList[2], value: Int64):
+        self.set(index[0], index[1], value)
 
 fn encode_img_b64(fig: PythonObject) raises -> String:
     """Encode a matplotlib figure as a base64 PNG string."""
@@ -249,6 +258,20 @@ fn matrix_to_numpy(m: Matrix2D) raises -> PythonObject:
             py_row.append(m.get(i, j))
         py_rows.append(py_row)
     return np.array(py_rows)
+
+
+fn from_numpy(arr: PythonObject) raises -> Matrix2D:
+    """Create a Matrix2D from a NumPy 2D array (int64 or coercible to integer)."""
+    Python.add_to_path(StringSlice(py_lib))
+    if arr.ndim != 2:
+        raise Error("from_numpy expects a 2D array")
+    var rows = Int(py=arr.shape[0])
+    var cols = Int(py=arr.shape[1])
+    var mat = Matrix2D(rows, cols)
+    for i in range(rows):
+        for j in range(cols):
+            mat.set(i, j, Int64(py=arr.item(i, j)))
+    return mat^
 
 
 fn grow_tensor(old_list: List[Int64], new_size: Int) -> List[Int64]:

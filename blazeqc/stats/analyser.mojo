@@ -6,6 +6,6 @@ from blazeseq import FastqRecord
 comptime py_lib: String = ".pixi/envs/default/lib/python3.12/site-packages/"
 
 
-trait Analyser(Movable & Copyable):
+trait Analyser(Copyable):
     fn tally_read(mut self, record: FastqRecord):
         ...

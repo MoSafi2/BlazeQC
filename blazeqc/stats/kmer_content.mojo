@@ -5,19 +5,21 @@ from memory import Span
 from python import Python, PythonObject
 from blazeseq import FastqRecord
 from blazeqc.stats.analyser import py_lib
-from blazeqc.helpers import base2int, grow_tensor, matrix_to_numpy
+from blazeqc.helpers import base2int, grow_tensor, Matrix2D, matrix_to_numpy
 
 
 # TODO: Test if rolling hash function with power of two modulu's would work.
 @value
 struct KmerContent[KMERSIZE: Int]:
-    var kmers: List[Tensor[DType.int64]]
+    var kmers: List[List[Int64]]
     var max_length: Int
 
     fn __init__(out self):
-        self.kmers = List[Tensor[DType.int64]](capacity=pow(4, KMERSIZE))
+        self.kmers = List[List[Int64]](capacity=pow(4, KMERSIZE))
         for _ in range(pow(4, KMERSIZE)):
-            self.kmers.append(Tensor[DType.int64](TensorShape(1)))
+            var one = List[Int64](capacity=1)
+            one.append(0)
+            self.kmers.append(one^)
         self.max_length = 0
 
     @always_inline
@@ -30,11 +32,11 @@ struct KmerContent[KMERSIZE: Int]:
 
         if len(record) > self.max_length:
             self.max_length = len(record)
-            var new_kmers = List[Tensor[DType.int64]](capacity=pow(4, KMERSIZE))
+            var new_kmers = List[List[Int64]](capacity=pow(4, KMERSIZE))
             for i in range(pow(4, KMERSIZE)):
                 new_kmers.append(grow_tensor(self.kmers[i], self.max_length))
 
-            self.kmers = new_kmers
+            self.kmers = new_kmers^
 
         var s = record.get_seq().as_bytes()
         # INFO: As per FastQC: limit the Kmers to the first 500 BP for long reads
@@ -63,14 +65,12 @@ struct KmerContent[KMERSIZE: Int]:
     # Check: https://github.com/smithlabcode/falco/blob/f4f0e6ca35e262cbeffc81fdfc620b3413ecfe2c/src/Module.cpp#L2068
     fn plot(self) raises -> PythonObject:
         Python.add_to_path(py_lib.as_string_slice())
-        var agg_tensor = Tensor[DType.int64](
-            TensorShape(pow(4, KMERSIZE), self.max_length)
-        )
+        var agg = Matrix2D(pow(4, KMERSIZE), self.max_length)
         for i in range(len(self.kmers)):
-            for j in range(self.kmers[i].num_elements()):
-                agg_tensor[Index(i, j)] = self.kmers[i][j]
+            for j in range(len(self.kmers[i])):
+                agg[Index(i, j)] = self.kmers[i][j]
 
-        mat = matrix_to_numpy(agg_tensor)
+        var mat = matrix_to_numpy(agg)
         return mat
 
     # TODO: Sort the Kmers to report
