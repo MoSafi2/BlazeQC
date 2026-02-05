@@ -21,7 +21,10 @@ fn main() raises:
         try:
             var record = parser.next()
             n += 1
-            stats.tally(record)
+            if record is not None:
+                stats.tally(record.take())
+            else:
+                break
         except Error:
             print(Error)
             t1 = perf_counter_ns()

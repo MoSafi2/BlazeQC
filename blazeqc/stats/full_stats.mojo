@@ -44,7 +44,7 @@ struct FullStats(Copyable):
 
     @always_inline
     fn tally[
-        check_quality: Bool = True
+        check_quality: Bool
     ](mut self, record: FastqRecord[val=check_quality]):
         self.num_reads += 1
         self.total_bases += len(record)
@@ -56,15 +56,6 @@ struct FullStats(Copyable):
         self.adpt_cont.tally_read(record, self.num_reads)
         self.tile_qual.tally_read(record)
 
-    @always_inline
-    fn tally(mut self, record: RecordCoord):
-        self.num_reads += 1
-        self.total_bases += Int(record.seq_len())
-        self.bp_dist.tally_read(record)
-        self.len_dist.tally_read(record)
-        self.cg_content.tally_read(record)
-        self.qu_dist.tally_read(record)
-        pass
 
     @always_inline
     fn make_base_stats(self) raises -> result_panel:
