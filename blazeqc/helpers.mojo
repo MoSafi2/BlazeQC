@@ -46,7 +46,6 @@ struct Matrix2D(Copyable & Movable):
 
 fn encode_img_b64(fig: PythonObject) raises -> String:
     """Encode a matplotlib figure as a base64 PNG string."""
-    Python.add_to_path(StringSlice(py_lib))
     var py_io = Python.import_module("io")
     var py_base64 = Python.import_module("base64")
     var plt = Python.import_module("matplotlib.pyplot")
@@ -141,7 +140,6 @@ fn make_linear_base_groups(max_length: Int) -> List[Int]:
 fn bin_array(
     arr: PythonObject, bins: List[Int], func: String = "sum"
 ) raises -> Tuple[PythonObject, PythonObject]:
-    Python.add_to_path(StringSlice(py_lib))
     var np = Python.import_module("numpy")
 
     var py_bins = Python.list()
@@ -229,7 +227,6 @@ fn _seq_to_hash(seq: String) -> UInt64:
 
 fn tensor_to_numpy_1d(ref data: List[Int64]) raises -> PythonObject:
     """Convert a 1D List[Int64] to a NumPy array."""
-    Python.add_to_path(StringSlice(py_lib))
     var np = Python.import_module("numpy")
     var py_list = Python.list()
     for val in data:
@@ -239,7 +236,6 @@ fn tensor_to_numpy_1d(ref data: List[Int64]) raises -> PythonObject:
 
 fn list_float64_to_numpy(ref data: List[Float64]) raises -> PythonObject:
     """Convert a List[Float64] to a NumPy float64 array."""
-    Python.add_to_path(StringSlice(py_lib))
     var np = Python.import_module("numpy")
     var py_list = Python.list()
     for val in data:
@@ -249,7 +245,6 @@ fn list_float64_to_numpy(ref data: List[Float64]) raises -> PythonObject:
 
 fn matrix_to_numpy(m: Matrix2D) raises -> PythonObject:
     """Convert a Matrix2D to a NumPy 2D array."""
-    Python.add_to_path(StringSlice(py_lib))
     var np = Python.import_module("numpy")
     var py_rows = Python.list()
     for i in range(m.rows):
@@ -262,7 +257,6 @@ fn matrix_to_numpy(m: Matrix2D) raises -> PythonObject:
 
 fn from_numpy(arr: PythonObject) raises -> Matrix2D:
     """Create a Matrix2D from a NumPy 2D array (int64 or coercible to integer)."""
-    Python.add_to_path(StringSlice(py_lib))
     if arr.ndim != 2:
         raise Error("from_numpy expects a 2D array")
     var rows = Int(py=arr.shape[0])

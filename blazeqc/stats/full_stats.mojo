@@ -2,7 +2,7 @@
 
 from python import Python, PythonObject
 from blazeseq import FastqRecord, RecordCoord
-from blazeqc.stats.analyser import py_lib
+from blazeqc.stats.analyser import Analyser
 from blazeqc.stats.basepair_distribution import BasepairDistribution
 from blazeqc.stats.cg_content import CGContent
 from blazeqc.stats.duplication import DupReads
@@ -152,8 +152,6 @@ struct FullStats(Movable & Copyable):
         return plots^
 
     fn make_html(mut self, file_name: String) raises:
-        Python.add_to_path(py_lib.as_string_slice())
-
         var py_dt = Python.import_module("datetime")
         var dt_now = py_dt.datetime.now().strftime("%a %d %b %Y")
 

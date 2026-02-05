@@ -2,7 +2,7 @@
 
 from python import Python, PythonObject
 from blazeseq import FastqRecord, RecordCoord
-from blazeqc.stats.analyser import Analyser, py_lib
+from blazeqc.stats.analyser import Analyser
 from blazeqc.helpers import tensor_to_numpy_1d, encode_img_b64
 from blazeqc.html_maker import result_panel
 
@@ -70,7 +70,6 @@ struct CGContent(Analyser, Copyable, Movable):
         return theoritical_distribution
 
     fn plot(self) raises -> PythonObject:
-        Python.add_to_path(py_lib.as_string_slice())
         var plt = Python.import_module("matplotlib.pyplot")
         var arr = tensor_to_numpy_1d(self.cg_content)
         var theoritical_distribution = self.calculate_theoritical_distribution()

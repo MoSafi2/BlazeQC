@@ -2,7 +2,7 @@
 
 from python import Python, PythonObject
 from blazeseq import FastqRecord, RecordCoord
-from blazeqc.stats.analyser import Analyser, py_lib
+from blazeqc.stats.analyser import Analyser
 from blazeqc.helpers import tensor_to_numpy_1d, bin_array, encode_img_b64
 from blazeqc.html_maker import result_panel
 
@@ -63,7 +63,6 @@ struct LengthDistribution(Analyser, Copyable, Movable):
         return starting, interval
 
     fn plot(self) raises -> PythonObject:
-        Python.add_to_path(py_lib.as_string_slice())
         var plt = Python.import_module("matplotlib.pyplot")
         var np = Python.import_module("numpy")
         var mtp = Python.import_module("matplotlib")

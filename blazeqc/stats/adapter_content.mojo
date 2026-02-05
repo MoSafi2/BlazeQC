@@ -3,7 +3,7 @@
 from utils import Index
 from python import Python, PythonObject
 from blazeseq import FastqRecord
-from blazeqc.stats.analyser import Analyser, py_lib
+from blazeqc.stats.analyser import Analyser
 from blazeqc.helpers import Matrix2D, grow_matrix, matrix_to_numpy, encode_img_b64
 from blazeqc.html_maker import result_panel
 
@@ -72,7 +72,6 @@ struct AdapterContent[bits: Int = 3](Analyser):
 
     @always_inline
     fn plot(self, total_reads: Int64) raises -> PythonObject:
-        Python.add_to_path(py_lib.as_string_slice())
         var plt = Python.import_module("matplotlib.pyplot")
         var np = Python.import_module("numpy")
         var arr: PythonObject = matrix_to_numpy(self.hash_counts)

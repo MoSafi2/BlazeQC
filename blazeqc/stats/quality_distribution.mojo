@@ -2,7 +2,7 @@
 
 from python import Python, PythonObject
 from blazeseq import FastqRecord, RecordCoord
-from blazeqc.stats.analyser import Analyser, py_lib
+from blazeqc.stats.analyser import Analyser
 from blazeqc.helpers import (
     Matrix2D,
     QualitySchema,
@@ -90,7 +90,6 @@ struct QualityDistribution(Analyser, Copyable, Movable):
         return np.take(arr, indices, axis=1)
 
     fn plot(self) raises -> Tuple[PythonObject, PythonObject]:
-        Python.add_to_path(py_lib.as_string_slice())
         var np = Python.import_module("numpy")
         var plt = Python.import_module("matplotlib.pyplot")
         var mtp = Python.import_module("matplotlib")

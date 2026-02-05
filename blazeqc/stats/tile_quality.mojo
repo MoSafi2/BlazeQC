@@ -3,7 +3,7 @@
 from collections.dict import DictEntry, Dict, default_hasher
 from python import Python, PythonObject
 from blazeseq import FastqRecord
-from blazeqc.stats.analyser import Analyser, py_lib
+from blazeqc.stats.analyser import Analyser
 from blazeqc.helpers import tensor_to_numpy_1d, encode_img_b64, grow_tensor
 from blazeqc.html_maker import result_panel
 
@@ -82,7 +82,6 @@ struct PerTileQuality(Analyser, Copyable, Movable):
 
     # TODO: Construct a n_keys*max_length array to hold all information.
     fn plot(self) raises -> PythonObject:
-        Python.add_to_path(py_lib.as_string_slice())
         var np = Python.import_module("numpy")
         var sns = Python.import_module("seaborn")
         var plt = Python.import_module("matplotlib.pyplot")

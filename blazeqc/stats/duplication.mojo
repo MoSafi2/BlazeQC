@@ -3,7 +3,7 @@
 from collections.dict import Dict
 from python import Python, PythonObject
 from blazeseq import FastqRecord
-from blazeqc.stats.analyser import Analyser, py_lib
+from blazeqc.stats.analyser import Analyser
 from blazeqc.stats.over_represented import OverRepresentedSequence
 from blazeqc.helpers import list_float64_to_numpy, encode_img_b64
 from blazeqc.html_maker import result_panel, _make_row, _make_table
@@ -143,7 +143,6 @@ struct DupReads(Analyser, Copyable, Movable):
                 dup_slot = 9
             total_percentages[dup_slot] += count * dup_level
 
-        Python.add_to_path(py_lib.as_string_slice())
         var plt = Python.import_module("matplotlib.pyplot")
         var new_arr = List[Float64](capacity=len(total_percentages))
         for i in range(len(total_percentages)):

@@ -4,7 +4,7 @@ from utils import Index
 from memory import Span
 from python import Python, PythonObject
 from blazeseq import FastqRecord
-from blazeqc.stats.analyser import py_lib
+from blazeqc.stats.analyser import Analyser
 from blazeqc.helpers import base2int, grow_tensor, Matrix2D, matrix_to_numpy
 
 
@@ -63,7 +63,6 @@ struct KmerContent[KMERSIZE: Int](Copyable, Movable):
     # TODO: Figure out how the enrichment calculation is carried out.
     # Check: https://github.com/smithlabcode/falco/blob/f4f0e6ca35e262cbeffc81fdfc620b3413ecfe2c/src/Module.cpp#L2068
     fn plot(self) raises -> PythonObject:
-        Python.add_to_path(py_lib.as_string_slice())
         var agg = Matrix2D(pow(4, Self.KMERSIZE), self.max_length)
         for i in range(len(self.kmers)):
             for j in range(len(self.kmers[i])):
@@ -77,7 +76,6 @@ struct KmerContent[KMERSIZE: Int](Copyable, Movable):
     fn get_kmer_stats(
         self, kmer_count: PythonObject, num_kmers: Int
     ) raises -> PythonObject:
-        Python.add_to_path(py_lib.as_string_slice())
         var np = Python.import_module("numpy")
 
         var min_obs_exp_to_report = 1e-2

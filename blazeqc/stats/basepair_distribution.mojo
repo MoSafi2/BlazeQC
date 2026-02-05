@@ -3,7 +3,7 @@
 from collections.dict import Dict
 from python import Python, PythonObject
 from blazeseq import FastqRecord, RecordCoord
-from blazeqc.stats.analyser import Analyser, py_lib
+from blazeqc.stats.analyser import Analyser
 from blazeqc.helpers import (
     Matrix2D,
     matrix_to_numpy,
@@ -16,7 +16,7 @@ from blazeqc.html_maker import result_panel
 
 
 @fieldwise_init
-struct BasepairDistribution(Analyser, Movable):
+struct BasepairDistribution(Analyser):
     var bp_dist: Matrix2D
     var max_length: Int
     var min_length: Int
@@ -58,7 +58,6 @@ struct BasepairDistribution(Analyser, Movable):
     fn plot(
         self, total_reads: Int64
     ) raises -> Tuple[PythonObject, PythonObject]:
-        Python.add_to_path(py_lib.as_string_slice())
         var plt = Python.import_module("matplotlib.pyplot")
         var mtp = Python.import_module("matplotlib")
         var np = Python.import_module("numpy")
