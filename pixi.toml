@@ -1,19 +1,38 @@
 [workspace]
+name = "blazeqc"
+version = "0.1.0"
+description = "Fast quality control for sequencing data in Mojo."
 authors = ["MoSafi2 <mohamed.mabrouk@rwth-aachen.de>"]
 channels = [
     "https://conda.modular.com/max",
     "https://repo.prefix.dev/modular-community",
     "conda-forge",
     "bioconda",
+    "https://prefix.dev/pixi-build-backends",
 ]
+platforms = ["linux-64", "osx-arm64"]
+license = "MIT"
 preview = ["pixi-build"]
-description = "Add a short description here"
-name = "BlazeSeq"
-platforms = ["linux-64"]
+
+[package]
+name = "blazeqc"
 version = "0.1.0"
 
-[tasks]
-test = "mojo run tests/test_helpers.mojo"
+[package.build]
+backend = { name = "pixi-build-mojo", version = "0.*", channels = [
+    "https://prefix.dev/pixi-build-backends",
+    "https://prefix.dev/conda-forge",
+] }
+
+[package.host-dependencies]
+mojo-compiler = "=0.26.1.0"
+
+[package.build-dependencies]
+mojo-compiler = "=0.26.1.0"
+rattler-build = "*"
+
+[package.run-dependencies]
+mojo-compiler = "=0.26.1.0"
 
 [dependencies]
 mojo = "=0.26.1.0"
@@ -25,3 +44,10 @@ falco = ">=1.2.5,<2"
 fastp = ">=1.0.1,<2"
 python = ">=3.14.0,<3.15"
 blazeseq = { git = "https://github.com/MoSafi2/BlazeSeq", branch = "gpu_support" }
+
+[tasks]
+test = "mojo run tests/test_helpers.mojo"
+build = "mojo package blazeqc -o BlazeQC.mojopkg"
+t = { cmd = "sh -c 'find ./tests -name test_*.mojo | xargs -I % mojo test -I BlazeQC.mojopkg -D ASSERT=all %'", depends-on = ["build"] }
+rbuild = "pixi build"
+rtest = { cmd = "sh -c 'PKG=$(ls ./blazeqc*.conda 2>/dev/null || find .pixi/build -name \"blazeqc*.conda\" -type f 2>/dev/null | head -1); test -n \"$PKG\" && rattler-build test -c conda-forge -c https://conda.modular.com/max --package-file \"$PKG\"'", depends-on = ["rbuild"] }

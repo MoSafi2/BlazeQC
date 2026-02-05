@@ -1,0 +1,45 @@
+context:
+  version: "0.1.0"
+  mojo_version: "=0.26.1"
+
+package:
+  name: "blazeqc"
+  version: ${{ version }}
+
+source:
+  path: .
+  use_gitignore: true
+
+build:
+  number: 0
+  script:
+    - mojo package blazeqc -o ${{ PREFIX }}/lib/mojo/BlazeQC.mojopkg
+
+requirements:
+  host:
+    - max ${{ mojo_version }}
+  run:
+    - max ${{ mojo_version }}
+
+tests:
+  - script:
+      - if: unix
+        then:
+          - mojo test -I ${{ PREFIX }}/lib/mojo/BlazeQC.mojopkg tests/test_helpers.mojo
+    requirements:
+      run:
+        - max ${{ mojo_version }}
+    files:
+      recipe:
+        - tests/test_helpers.mojo
+        - tests/__init__.mojo
+
+about:
+  homepage: https://github.com/MoSafi2/BlazeQC
+  license: MIT
+  summary: Fast quality control for sequencing data in Mojo.
+  repository: https://github.com/MoSafi2/BlazeQC
+
+extra:
+  maintainers: []
+  project_name: blazeqc
