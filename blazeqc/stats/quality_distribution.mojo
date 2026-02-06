@@ -120,10 +120,8 @@ struct QualityDistribution(Analyser, Copyable, Movable):
         var Q25 = np.argmax(cum_sum > total_counts * 0.25, axis=1)
         var IQR = Q75 - Q25
 
-        # Get Python None via builtins for boxplot default whiskers (see docs: Calling Python from Mojo)
-        var builtins = Python.import_module("builtins")
-        var getattr_fn = builtins.get("getattr")
-        var py_none = getattr_fn(builtins, "None")
+        # Get Python None for boxplot default whiskers (matplotlib bxp uses None to auto whiskers)
+        var py_none = Python.evaluate("None")
         var whislo = np.full(len(IQR), py_none)
         var whishi = np.full(len(IQR), py_none)
 

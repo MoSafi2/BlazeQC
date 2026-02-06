@@ -31,6 +31,9 @@ fn main() raises:
             stats.make_html(String(args[1]))
             t2 = perf_counter_ns()
             print(n)
-            print("Total tally time: ", (t1 - t0) / 1e9, "s")
-            print("Total Plot time", (t2 - t1) / 1e9, "s")
+            print("Total tally time: ", Float64(t1 - t0) / 1e9, "s")
+            print("Total Plot time", Float64(t2 - t1) / 1e9, "s")
             break
+
+
+    stats.make_html(String(args[1]))
