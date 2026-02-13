@@ -2,10 +2,15 @@
 
 from utils import Index
 from python import Python, PythonObject
-from blazeseq import FastqRecord
 from blazeqc.stats.analyser import Analyser
-from blazeqc.helpers import Matrix2D, grow_matrix, matrix_to_numpy, encode_img_b64
+from blazeqc.helpers import (
+    Matrix2D,
+    grow_matrix,
+    matrix_to_numpy,
+    encode_img_b64,
+)
 from blazeqc.html_maker import result_panel
+#from blazeseq.record import FastqRecord
 
 
 # TODO: Check how to add the analyzer Trait again
@@ -26,7 +31,9 @@ struct AdapterContent[bits: Int = 3](Analyser):
 
     fn __copyinit__(out self, existing: Self):
         self.kmer_len = existing.kmer_len
-        self.hash_counts = Matrix2D(existing.hash_counts.rows, existing.hash_counts.cols)
+        self.hash_counts = Matrix2D(
+            existing.hash_counts.rows, existing.hash_counts.cols
+        )
         for i in range(existing.hash_counts.rows):
             for j in range(existing.hash_counts.cols):
                 self.hash_counts.set(i, j, existing.hash_counts.get(i, j))

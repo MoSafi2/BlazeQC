@@ -35,7 +35,8 @@ fn _make_summary_insert(panel: result_panel) raises -> String:
 @always_inline
 fn _make_module_insert(panel: result_panel) raises -> String:
     if panel.panel_type == "image":
-        return String("""
+        return String(
+            """
                 <div class="module">
                     <h2 class="{0}" id="{1}">
                         {2}
@@ -45,11 +46,11 @@ fn _make_module_insert(panel: result_panel) raises -> String:
                     </div>
                 </div>
 
-                    """).format(
-            panel.grade, panel.name, panel.legand, panel.html_output
-        )
+                    """
+        ).format(panel.grade, panel.name, panel.legand, panel.html_output)
     elif panel.panel_type == "table":
-        return String("""
+        return String(
+            """
                 <div class="module">
                     <h2 class="{0}" id="{1}">
                         {2}
@@ -59,9 +60,8 @@ fn _make_module_insert(panel: result_panel) raises -> String:
                     </div>
                 </div>
                  
-                    """).format(
-            panel.grade, panel.name, panel.legand, panel.html_output
-        )
+                    """
+        ).format(panel.grade, panel.name, panel.legand, panel.html_output)
 
     else:
         return """
@@ -159,7 +159,7 @@ fn format_length(original_length: Float64) -> String:
         # We keep the next char as well if they are non-zero numbers
         if dot_pos + 1 < len(chars):
             var next_slice = chars[dot_pos + 1 : dot_pos + 2]
-            if next_slice != "0":
+            if next_slice != StringSlice[StaticConstantOrigin]("0"):
                 last_index = dot_pos + 1
             elif dot_pos > 0:
                 last_index = dot_pos - 1  # Lose the dot if next is zero

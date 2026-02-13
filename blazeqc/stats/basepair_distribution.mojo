@@ -1,5 +1,4 @@
 """Base pair distribution (split from stats_.mojo)."""
-
 from collections.dict import Dict
 from python import Python, PythonObject
 from blazeseq import FastqRecord, RecordCoord
@@ -31,9 +30,7 @@ struct BasepairDistribution(Analyser):
         var rec_len = len(record)
         if rec_len > self.max_length:
             self.max_length = rec_len
-            var new_mat = grow_matrix(
-                self.bp_dist, self.max_length, self.WIDTH
-            )
+            var new_mat = grow_matrix(self.bp_dist, self.max_length, self.WIDTH)
             swap(self.bp_dist, new_mat)
 
         if rec_len < self.min_length:
@@ -46,9 +43,7 @@ struct BasepairDistribution(Analyser):
     fn tally_read(mut self, record: RecordCoord):
         if record.seq_len() > self.max_length:
             self.max_length = Int(record.seq_len())
-            var new_mat = grow_matrix(
-                self.bp_dist, self.max_length, self.WIDTH
-            )
+            var new_mat = grow_matrix(self.bp_dist, self.max_length, self.WIDTH)
             swap(self.bp_dist, new_mat)
 
         for i in range(Int(record.seq_len())):
