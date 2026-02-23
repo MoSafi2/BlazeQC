@@ -1,7 +1,7 @@
 """CG content (split from stats_.mojo)."""
 
 from python import Python, PythonObject
-from blazeseq import FastqRecord, RecordCoord
+from blazeseq import FastqRecord
 from blazeqc.stats.analyser import Analyser
 from blazeqc.helpers import tensor_to_numpy_1d, encode_img_b64
 from blazeqc.html_maker import result_panel
@@ -28,29 +28,14 @@ struct CGContent(Analyser, Copyable, Movable):
 
         for index in range(0, len(record)):
             if (
-                record.SeqStr[index] & 0b111 == 3
-                or record.SeqStr[index] & 0b111 == 7
+                record.sequence[index] & 0b111 == 3
+                or record.sequence[index] & 0b111 == 7
             ):
                 cg_num += 1
 
         var read_cg_content = Int(
             round(cg_num * 100 / Int(len(record)))
         )
-        self.cg_content[read_cg_content] += 1
-
-    fn tally_read(mut self, record: RecordCoord):
-        if record.seq_len() == 0:
-            return
-        var cg_num = 0
-
-        for index in range(0, record.seq_len()):
-            if (
-                record.SeqStr[index] & 0b111 == 3
-                or record.SeqStr[index] & 0b111 == 7
-            ):
-                cg_num += 1
-
-        var read_cg_content = Int(round(cg_num * 100 / Int(record.seq_len())))
         self.cg_content[read_cg_content] += 1
 
     # TODO: Convert as much as possible away from numpy

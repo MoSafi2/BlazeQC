@@ -43,7 +43,8 @@ ipykernel = ">=6.31.0,<7"
 falco = ">=1.2.5,<2"
 fastp = ">=1.0.1,<2"
 python = ">=3.14.0,<3.15"
-blazeseq = { git = "https://github.com/MoSafi2/BlazeSeq", branch = "gpu_support" }
+blazeseq = { git = "https://github.com/MoSafi2/BlazeSeq", branch = "main" }
+fastqc = ">=0.12.1,<0.13"
 
 [tasks]
 test = "mojo run -I BlazeQC.mojopkg -D ASSERT=all tests/test_helpers.mojo && mojo run -I BlazeQC.mojopkg -D ASSERT=all tests/test_helpers_python.mojo"

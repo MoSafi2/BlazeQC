@@ -10,7 +10,7 @@ from blazeqc.helpers import (
     encode_img_b64,
 )
 from blazeqc.html_maker import result_panel
-#from blazeseq.record import FastqRecord
+from blazeseq import FastqRecord
 
 
 # TODO: Check how to add the analyzer Trait again
@@ -72,7 +72,7 @@ struct AdapterContent[bits: Int = 3](Analyser):
             hash = hash & neg_mask
 
             # Mask for the least sig. three bits, add to hash
-            var rem = record.SeqStr[i] & bit_shift
+            var rem = record.sequence.as_span()[i] & bit_shift
             hash = (hash << Self.bits) + Int(rem)
             if len(self.hash_list) > 0:
                 self._check_hashes(hash, i + 1)

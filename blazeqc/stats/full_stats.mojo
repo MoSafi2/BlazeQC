@@ -1,7 +1,7 @@
 """FullStats aggregate (split from stats_.mojo)."""
 
 from python import Python, PythonObject
-from blazeseq import FastqRecord, RecordCoord
+from blazeseq import FastqRecord
 from blazeqc.stats.analyser import Analyser
 from blazeqc.stats.basepair_distribution import BasepairDistribution
 from blazeqc.stats.cg_content import CGContent
@@ -43,9 +43,7 @@ struct FullStats(Copyable):
         self.adpt_cont = AdapterContent[bits=3](hash_list(), 12)
 
     @always_inline
-    fn tally[
-        check_quality: Bool
-    ](mut self, record: FastqRecord[val=check_quality]):
+    fn tally(mut self, record: FastqRecord):
         self.num_reads += 1
         self.total_bases += len(record)
         self.bp_dist.tally_read(record)

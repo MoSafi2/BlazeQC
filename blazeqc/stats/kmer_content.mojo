@@ -37,7 +37,7 @@ struct KmerContent[KMERSIZE: Int](Copyable, Movable):
 
             self.kmers = new_kmers^
 
-        var s = record.get_seq().as_bytes()
+        var s = record.sequence.as_span()
         # INFO: As per FastQC: limit the Kmers to the first 500 BP for long reads
         for i in range(min(len(record), 500) - Self.KMERSIZE):
             var kmer = s[i : i + Self.KMERSIZE]

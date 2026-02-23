@@ -68,7 +68,7 @@ struct PerTileQuality(Analyser, Copyable, Movable):
                 )
 
             for i in range(len(record)):
-                deref_value.quality[i] += Int(record.QuStr[i])
+                deref_value.quality[i] += Int(record.quality[i])
 
             self.map._entries[pos] = DictEntry[
                 Int, TileQualityEntry, default_hasher
@@ -118,11 +118,10 @@ struct PerTileQuality(Analyser, Copyable, Movable):
     # TODO: This function should return tile information
     @always_inline
     fn _find_tile_info(self, record: FastqRecord) -> Int:
-        header = record.get_header_string().as_bytes()
         comptime sep: UInt8 = ord(":")
         count = 0
-        for i in range(len(header)):
-            if header[i] == sep:
+        for i in range(len(record.id)):
+            if record.id[i] == sep:
                 count += 1
         var split_position: Int
         if count >= 6:
@@ -139,11 +138,10 @@ struct PerTileQuality(Analyser, Copyable, Movable):
         var index_1 = 0
         var index_2 = 0
         var count = 0
-        var header = record.get_header_string().as_bytes()
-        var header_slice = record.get_header_string()
+        var id_slice = record.id_slice()
         # TODO: Add Error Handling
-        for i in range(len(header)):
-            if header[i] == sep:
+        for i in range(len(record.id)):
+            if record.id[i] == sep:
                 count += 1
                 if count == pos:
                     index_1 = i + 1
@@ -151,7 +149,7 @@ struct PerTileQuality(Analyser, Copyable, Movable):
                     index_2 = i
                     break
 
-        var s = String(header_slice)
+        var s = String(id_slice)
 
         try:
             return atol(s[index_1:index_2])

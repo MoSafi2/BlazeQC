@@ -1,7 +1,7 @@
 """Base pair distribution (split from stats_.mojo)."""
 from collections.dict import Dict
 from python import Python, PythonObject
-from blazeseq import FastqRecord, RecordCoord
+from blazeseq import FastqRecord
 from blazeqc.stats.analyser import Analyser
 from blazeqc.helpers import (
     Matrix2D,
@@ -37,17 +37,7 @@ struct BasepairDistribution(Analyser):
             self.min_length = rec_len
 
         for i in range(rec_len):
-            var base_val = Int((record.SeqStr[i] & 0b11111) % self.WIDTH)
-            self.bp_dist.add(i, base_val, 1)
-
-    fn tally_read(mut self, record: RecordCoord):
-        if record.seq_len() > self.max_length:
-            self.max_length = Int(record.seq_len())
-            var new_mat = grow_matrix(self.bp_dist, self.max_length, self.WIDTH)
-            swap(self.bp_dist, new_mat)
-
-        for i in range(Int(record.seq_len())):
-            var base_val = Int((record.SeqStr[i] & 0b11111) % self.WIDTH)
+            var base_val = Int((record.sequence[i] & 0b11111) % self.WIDTH)
             self.bp_dist.add(i, base_val, 1)
 
     fn plot(
