@@ -1,11 +1,13 @@
 from pathlib import Path
-from blazeseq import FastqParser, FileReader, GZFile
+from blazeseq import FastqParser, FileReader, RapidgzipReader, ParserConfig
 from blazeqc.stats import FullStats
 from time import perf_counter_ns
 from sys import argv
 from os import abort
 from utils import Variant
 
+
+comptime config = ParserConfig(check_ascii=False, check_quality=False, buffer_capacity=64*1024)
 
 fn main() raises:
     args = argv()
@@ -23,14 +25,14 @@ fn main() raises:
 
     var fastq_file = String(args[1])
     if fastq_file.endswith(".gz"):
-        var parser = FastqParser(GZFile(String(fastq_file), "r"), "generic")
+        var parser = FastqParser[config=config](RapidgzipReader(fastq_file, parallelism=0), "generic")
         for record in parser.ref_records():
             n += 1
             stats.tally(record)
         stats.make_html(String(args[1]))
 
     elif fastq_file.endswith(".fastq"):
-        var parser = FastqParser(FileReader(Path(fastq_file)), "generic")
+        var parser = FastqParser[config=config](FileReader(Path(fastq_file)), "generic")
         for record in parser.ref_records():
             n += 1
             stats.tally(record)
