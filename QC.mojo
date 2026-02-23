@@ -15,8 +15,8 @@ fn main() raises:
     var n = 0
 
     t0 = perf_counter_ns()
-    for record in parser.records():
+    for record in parser.ref_records():
         n += 1
         stats.tally(record)
-
+    print(n)
     stats.make_html(String(args[1]))

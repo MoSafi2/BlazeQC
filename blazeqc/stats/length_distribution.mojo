@@ -1,7 +1,7 @@
 """Length distribution (split from stats_.mojo)."""
 
 from python import Python, PythonObject
-from blazeseq import FastqRecord
+from blazeseq import FastqRecord, RefRecord
 from blazeqc.stats.analyser import Analyser
 from blazeqc.helpers import tensor_to_numpy_1d, bin_array, encode_img_b64
 from blazeqc.html_maker import result_panel
@@ -15,6 +15,12 @@ struct LengthDistribution(Analyser, Copyable, Movable):
 
     @always_inline
     fn tally_read(mut self, record: FastqRecord):
+        while len(self.length_vector) < len(record):
+            self.length_vector.append(0)
+        self.length_vector[len(record) - 1] += 1
+
+    @always_inline
+    fn tally_read(mut self, record: RefRecord):
         while len(self.length_vector) < len(record):
             self.length_vector.append(0)
         self.length_vector[len(record) - 1] += 1

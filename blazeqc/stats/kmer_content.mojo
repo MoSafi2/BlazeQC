@@ -3,7 +3,7 @@
 from utils import Index
 from memory import Span
 from python import Python, PythonObject
-from blazeseq import FastqRecord
+from blazeseq import FastqRecord, RefRecord
 from blazeqc.stats.analyser import Analyser
 from blazeqc.helpers import base2int, grow_tensor, Matrix2D, matrix_to_numpy
 
@@ -43,6 +43,32 @@ struct KmerContent[KMERSIZE: Int](Copyable, Movable):
             var kmer = s[i : i + Self.KMERSIZE]
             var contains_n = False
             # TODO: Check how this optimized in Cpp
+            for l in kmer:
+                if l == N_b or l == n_b:
+                    contains_n = True
+            if contains_n:
+                continue
+            self.kmers[self.kmer_to_index(kmer)][i] += 1
+
+    fn tally_read(mut self, record: RefRecord, read_num: Int64):
+        comptime N_b = ord("N")
+        comptime n_b = ord("n")
+
+        if read_num % 50 != 0:
+            return
+
+        if len(record) > self.max_length:
+            self.max_length = len(record)
+            var new_kmers = List[List[Int64]](capacity=pow(4, Self.KMERSIZE))
+            for i in range(pow(4, Self.KMERSIZE)):
+                new_kmers.append(grow_tensor(self.kmers[i], self.max_length))
+
+            self.kmers = new_kmers^
+
+        var s = record.sequence.as_span()
+        for i in range(min(len(record), 500) - Self.KMERSIZE):
+            var kmer = s[i : i + Self.KMERSIZE]
+            var contains_n = False
             for l in kmer:
                 if l == N_b or l == n_b:
                     contains_n = True

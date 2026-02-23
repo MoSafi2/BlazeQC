@@ -2,7 +2,7 @@
 
 from collections.dict import Dict
 from python import Python, PythonObject
-from blazeseq import FastqRecord
+from blazeseq import FastqRecord, RefRecord
 from blazeqc.stats.analyser import Analyser
 from blazeqc.stats.over_represented import OverRepresentedSequence
 from blazeqc.helpers import list_float64_to_numpy, encode_img_b64
@@ -28,6 +28,31 @@ struct DupReads(Analyser, Copyable, Movable):
 
     # TODO: Check if the Stringslice to String Conversion is right
     fn tally_read(mut self, record: FastqRecord):
+        self.n += 1
+        var read_len = min(len(record), 50)
+        var s: String
+        try:
+            s = String(record.sequence_slice()[0:read_len])
+        except:
+            s = ""
+        if s in self.unique_dict:
+            try:
+                self.unique_dict[s] += 1
+                return
+            except error:
+                print(error)
+                pass
+
+        if self.unique_reads <= self.MAX_READS:
+            self.unique_dict[s] = 1
+            self.unique_reads += 1
+
+            if self.unique_reads <= self.MAX_READS:
+                self.count_at_max = self.n
+        else:
+            return
+
+    fn tally_read(mut self, record: RefRecord):
         self.n += 1
         var read_len = min(len(record), 50)
         var s: String

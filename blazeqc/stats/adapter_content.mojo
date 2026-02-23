@@ -10,7 +10,7 @@ from blazeqc.helpers import (
     encode_img_b64,
 )
 from blazeqc.html_maker import result_panel
-from blazeseq import FastqRecord
+from blazeseq import FastqRecord, RefRecord
 
 
 # TODO: Check how to add the analyzer Trait again
@@ -45,6 +45,34 @@ struct AdapterContent[bits: Int = 3](Analyser):
     @always_inline
     fn tally_read(mut self, record: FastqRecord):
         self.tally_read(record, 0)
+
+    @always_inline
+    fn tally_read(mut self, record: RefRecord):
+        self.tally_read(record, 0)
+
+    fn tally_read(mut self, record: RefRecord, read_no: Int64):
+        var hash: UInt64 = 0
+        var end = 0
+        var mask: UInt64 = (0b1 << self.kmer_len * Self.bits) - 1
+        var neg_mask = mask >> Self.bits
+        var bit_shift = (0b1 << Self.bits) - 1
+
+        var rec_len = len(record)
+        if rec_len > self.max_length:
+            self.max_length = rec_len
+            self.hash_counts = grow_matrix(
+                self.hash_counts, len(self.hash_list), self.max_length
+            )
+
+        if len(self.hash_list) > 0:
+            self._check_hashes(hash, 1)
+
+        for i in range(end, rec_len):
+            hash = hash & neg_mask
+            var rem = record.sequence[i] & bit_shift
+            hash = (hash << Self.bits) + Int(rem)
+            if len(self.hash_list) > 0:
+                self._check_hashes(hash, i + 1)
 
     # TODO: Check if it will be easier to use the bool_tuple and hashes as a list instead
     @always_inline

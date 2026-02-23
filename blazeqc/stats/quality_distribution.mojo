@@ -1,7 +1,7 @@
 """Quality distribution (split from stats_.mojo)."""
 
 from python import Python, PythonObject
-from blazeseq import FastqRecord
+from blazeseq import FastqRecord, RefRecord
 from blazeqc.stats.analyser import Analyser
 from blazeqc.helpers import (
     Matrix2D,
@@ -39,6 +39,28 @@ struct QualityDistribution(Analyser, Copyable, Movable):
         self.min_qu = 128
 
     fn tally_read(mut self, record: FastqRecord):
+        if len(record) > self.max_length:
+            self.max_length = len(record)
+            var new_qu_dist = grow_matrix(self.qu_dist, self.max_length, 128)
+            swap(self.qu_dist, new_qu_dist)
+
+        for i in range(len(record)):
+            var base_qu = record.quality[i]
+            self.qu_dist.add(i, Int(base_qu), 1)
+            if base_qu > self.max_qu:
+                self.max_qu = base_qu
+            if base_qu < self.min_qu:
+                self.min_qu = base_qu
+
+        var qu_sum: Int = 0
+        for i in range(len(record)):
+            qu_sum += Int(record.quality[i])
+        var average = Int(qu_sum / len(record))
+        while len(self.qu_dist_seq) <= average:
+            self.qu_dist_seq.append(0)
+        self.qu_dist_seq[average] += 1
+
+    fn tally_read(mut self, record: RefRecord):
         if len(record) > self.max_length:
             self.max_length = len(record)
             var new_qu_dist = grow_matrix(self.qu_dist, self.max_length, 128)

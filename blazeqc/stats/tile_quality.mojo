@@ -2,7 +2,7 @@
 
 from collections.dict import DictEntry, Dict, default_hasher
 from python import Python, PythonObject
-from blazeseq import FastqRecord
+from blazeseq import FastqRecord, RefRecord
 from blazeqc.stats.analyser import Analyser
 from blazeqc.helpers import tensor_to_numpy_1d, encode_img_b64, grow_tensor
 from blazeqc.html_maker import result_panel
@@ -59,6 +59,40 @@ struct PerTileQuality(Analyser, Copyable, Movable):
 
         if index[0]:
             pos = index[2]
+            entry = self.map._entries[pos]
+            var deref_value = entry.unsafe_value().value.copy()
+            deref_value.count += 1
+            if len(deref_value.quality) < len(record):
+                deref_value.quality = grow_tensor(
+                    deref_value.quality, len(record)
+                )
+
+            for i in range(len(record)):
+                deref_value.quality[i] += Int(record.quality[i])
+
+            self.map._entries[pos] = DictEntry[
+                Int, TileQualityEntry, default_hasher
+            ](val, deref_value^)
+
+        else:
+            self.map[val] = TileQualityEntry(val, 1, len(record))
+
+        if self.max_length < len(record):
+            self.max_length = len(record)
+
+    fn tally_read(mut self, record: RefRecord):
+        self.n += 1
+        if self.n >= 10_000:
+            if self.n % 10 != 0:
+                return
+
+        var x = self._find_tile_info(record)
+        var val = self._find_tile_value(record, x)
+
+        var index = self.map._find_index(hash(val), val)
+
+        if index[0]:
+            var pos = index[2]
             entry = self.map._entries[pos]
             var deref_value = entry.unsafe_value().value.copy()
             deref_value.count += 1
@@ -140,6 +174,45 @@ struct PerTileQuality(Analyser, Copyable, Movable):
         var count = 0
         var id_slice = record.id_slice()
         # TODO: Add Error Handling
+        for i in range(len(record.id)):
+            if record.id[i] == sep:
+                count += 1
+                if count == pos:
+                    index_1 = i + 1
+                if count == pos + 1:
+                    index_2 = i
+                    break
+
+        var s = String(id_slice)
+
+        try:
+            return atol(s[index_1:index_2])
+        except:
+            return 0
+
+    @always_inline
+    fn _find_tile_info(self, record: RefRecord) -> Int:
+        comptime sep: UInt8 = ord(":")
+        var count = 0
+        for i in range(len(record.id)):
+            if record.id[i] == sep:
+                count += 1
+        var split_position: Int
+        if count >= 6:
+            split_position = 4
+        elif count >= 4:
+            split_position = 2
+        else:
+            return -1
+        return split_position
+
+    @always_inline
+    fn _find_tile_value(self, record: RefRecord, pos: Int) -> Int:
+        comptime sep: UInt8 = ord(":")
+        var index_1 = 0
+        var index_2 = 0
+        var count = 0
+        var id_slice = record.id_slice()
         for i in range(len(record.id)):
             if record.id[i] == sep:
                 count += 1

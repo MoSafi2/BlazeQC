@@ -15,7 +15,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/_python_abi3_support-1.0-hd8ed1ab_2.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/alsa-lib-1.2.15.3-hb03c661_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/asttokens-3.0.1-pyhd8ed1ab_0.conda
-      - conda: git+https://github.com/mosafi2/blazeseq?branch=main#f6d1d801daf53be36cb6644a68dc797a578313fb
+      - conda: git+https://github.com/mosafi2/blazeseq?branch=main#d76fe8a9463efdde2e095482a92762608f2065ef
         build: hb0f4dca_0
       - conda: https://conda.anaconda.org/conda-forge/linux-64/brotli-1.2.0-hed03a55_1.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/brotli-bin-1.2.0-hb03c661_1.conda
@@ -210,7 +210,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/_python_abi3_support-1.0-hd8ed1ab_2.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/appnope-0.1.4-pyhd8ed1ab_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/asttokens-3.0.1-pyhd8ed1ab_0.conda
-      - conda: git+https://github.com/mosafi2/blazeseq?branch=main#f6d1d801daf53be36cb6644a68dc797a578313fb
+      - conda: git+https://github.com/mosafi2/blazeseq?branch=main#d76fe8a9463efdde2e095482a92762608f2065ef
         build: h60d57d3_0
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/brotli-1.2.0-h7d5ae5b_1.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/brotli-bin-1.2.0-hc919400_1.conda
@@ -399,7 +399,7 @@ packages:
   license_family: Apache
   size: 28797
   timestamp: 1763410017955
-- conda: git+https://github.com/mosafi2/blazeseq?branch=main#f6d1d801daf53be36cb6644a68dc797a578313fb
+- conda: git+https://github.com/mosafi2/blazeseq?branch=main#d76fe8a9463efdde2e095482a92762608f2065ef
   name: blazeseq
   version: 0.2.0
   build: h60d57d3_0
@@ -409,7 +409,7 @@ packages:
   depends:
   - mojo-compiler 0.26.1.0.*
   channel: null
-- conda: git+https://github.com/mosafi2/blazeseq?branch=main#f6d1d801daf53be36cb6644a68dc797a578313fb
+- conda: git+https://github.com/mosafi2/blazeseq?branch=main#d76fe8a9463efdde2e095482a92762608f2065ef
   name: blazeseq
   version: 0.2.0
   build: hb0f4dca_0

@@ -25,17 +25,17 @@ backend = { name = "pixi-build-mojo", version = "0.*", channels = [
 ] }
 
 [package.host-dependencies]
-mojo-compiler = "0.26.1.0"
+mojo-compiler = "==0.26.1.0"
 
 [package.build-dependencies]
-mojo-compiler = "0.26.1.0"
+mojo-compiler = "==0.26.1.0"
 rattler-build = "*"
 
 [package.run-dependencies]
-mojo-compiler = "0.26.1.0"
+mojo-compiler = "==0.26.1.0"
 
 [dependencies]
-mojo = "0.26.1.0"
+mojo = "==0.26.1.0"
 matplotlib = ">=3.10.6,<4"
 numpy = ">=2.3.3,<3"
 seaborn = ">=0.13.2,<0.14"
