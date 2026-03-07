@@ -48,11 +48,8 @@ rapidgzip-mojo = { git = "https://github.com/MoSafi2/rapidgzip_mojo", branch = "
 fastqc = ">=0.12.1,<0.13"
 
 [tasks]
-test = "mojo run -I BlazeQC.mojopkg -D ASSERT=all tests/test_helpers.mojo && mojo run -I BlazeQC.mojopkg -D ASSERT=all tests/test_helpers_python.mojo"
+test = { cmd = "sh -c 'find ./tests -name \"test_*.mojo\" | xargs -I % pixi run mojo run -I . -D ASSERT=all %'" }
 build = "mojo package blazeqc -o BlazeQC.mojopkg"
-t = { cmd = "sh -c 'find ./tests -name test_*.mojo | xargs -I % mojo test -I BlazeQC.mojopkg -D ASSERT=all %'", depends-on = [
-    "build",
-] }
 rbuild = "pixi build"
 rtest = { cmd = "sh -c 'PKG=$(ls ./blazeqc*.conda 2>/dev/null || find .pixi/build -name \"blazeqc*.conda\" -type f 2>/dev/null | head -1); test -n \"$PKG\" && rattler-build test -c conda-forge -c https://conda.modular.com/max --package-file \"$PKG\"'", depends-on = [
     "rbuild",

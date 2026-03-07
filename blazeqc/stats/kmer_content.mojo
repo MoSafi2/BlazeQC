@@ -65,7 +65,7 @@ struct KmerContent[KMERSIZE: Int](Copyable, Movable):
 
             self.kmers = new_kmers^
 
-        var s = record.sequence.as_span()
+        var s = record.sequence
         for i in range(min(len(record), 500) - Self.KMERSIZE):
             var kmer = s[i : i + Self.KMERSIZE]
             var contains_n = False
