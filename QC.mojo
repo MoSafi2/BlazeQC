@@ -31,7 +31,7 @@ fn main() raises:
             stats.tally(record)
         stats.make_html(String(args[1]))
 
-    elif fastq_file.endswith(".fastq"):
+    elif fastq_file.endswith(".fastq") or fastq_file.endswith(".fq"):
         var parser = FastqParser[config=config](FileReader(Path(fastq_file)), "generic")
         for record in parser.ref_records():
             n += 1
