@@ -1,4 +1,12 @@
-from blazeqc.helpers import QualitySchema
+from blazeseq.quality_schema import (
+    QualitySchema,
+    generic_schema,
+    sanger_schema,
+    solexa_schema,
+    illumina_1_3_schema,
+    illumina_1_5_schema,
+    illumina_1_8_schema,
+)
 from sys.info import simd_width_of
 
 comptime KB = 1024
@@ -17,16 +25,3 @@ comptime simd_width: Int = simd_width_of[UInt8]()
 comptime DEFAULT_CAPACITY = 64 * KB
 comptime MAX_SHIFT = 30
 comptime MAX_CAPACITY = 2**MAX_SHIFT
-
-
-# Values for schemas are derived from
-# https://github.com/BioJulia/FASTX.jl/blob/master/src/fastq/quality.jl
-# Also check: https://www.biostars.org/p/90845/
-
-# Generic is the minimum and maximum value of all possible schemas schemas
-comptime generic_schema = QualitySchema("Generic", 33, 126, 33)
-comptime sanger_schema = QualitySchema("Sanger", 33, 126, 33)
-comptime solexa_schema = QualitySchema("Solexa", 59, 126, 64)
-comptime illumina_1_3_schema = QualitySchema("Illumina v1.3", 64, 126, 64)
-comptime illumina_1_5_schema = QualitySchema("Illumina v1.5", 66, 126, 64)
-comptime illumina_1_8_schema = QualitySchema("Illumina v1.8", 33, 126, 33)

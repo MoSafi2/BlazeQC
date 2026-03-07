@@ -5,7 +5,6 @@ from blazeseq import FastqRecord, RefRecord
 from blazeqc.stats.analyser import Analyser
 from blazeqc.helpers import (
     Matrix2D,
-    QualitySchema,
     matrix_to_numpy,
     grow_matrix,
     tensor_to_numpy_1d,
@@ -14,6 +13,7 @@ from blazeqc.helpers import (
     encode_img_b64,
 )
 from blazeqc.CONSTS import (
+    QualitySchema,
     illumina_1_5_schema,
     illumina_1_3_schema,
     illumina_1_8_schema,

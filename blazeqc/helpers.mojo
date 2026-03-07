@@ -163,34 +163,6 @@ fn bin_array(
     return new_arr, py_bins
 
 
-@fieldwise_init
-struct QualitySchema(Copyable & Movable, Stringable, Writable):
-    var SCHEMA: StringSlice[StaticConstantOrigin]
-    var LOWER: UInt8
-    var UPPER: UInt8
-    var OFFSET: UInt8
-
-    fn __init__(
-        out self,
-        schema: StringSlice[StaticConstantOrigin],
-        lower: Int,
-        upper: Int,
-        offset: Int,
-    ):
-        self.SCHEMA = schema
-        self.UPPER = upper
-        self.LOWER = lower
-        self.OFFSET = offset
-
-    fn write_to[w: Writer](self, mut writer: w) -> None:
-        writer.write(self.__str__())
-
-    fn __str__(self) -> String:
-        return "Quality schema: {}\nLower: {}\nUpper: {}\nOffset: {}".format(
-            self.SCHEMA, self.LOWER, self.UPPER, self.OFFSET
-        )
-
-
 @always_inline
 fn base2int(byte: Byte) -> UInt8:
     comptime A_b = 65
