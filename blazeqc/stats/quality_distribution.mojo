@@ -147,7 +147,7 @@ struct QualityDistribution(Analyser, Copyable, Movable):
         ax.bxp(l, showfliers=False)
         ax.plot(mean_line)
         ax.set_ylim(0, 60)
-        ax.set_title("Quality Scores across all bases")
+        ax.set_title("Quality scores across all bases")
         ax.set_xlabel("Position in read (bp)")
 
         var bins_range = Python.list()
@@ -183,22 +183,33 @@ struct QualityDistribution(Analyser, Copyable, Movable):
         return Tuple(fig, fig2)
 
     fn _get_status_per_base(self) -> String:
-        """Status from per-base quality: lower quartile and median (FastQC)."""
+        """Status from per-base quality: lower quartile and median per group (FastQC uses BaseGroup)."""
         var schema = self._guess_schema()
         var offset = schema.OFFSET
+        var bins = make_linear_base_groups(self.max_length)
         var min_q25_phred: Float64 = 1e9
         var min_median_phred: Float64 = 1e9
-        for row in range(self.qu_dist.rows):
+        for b in range(len(bins)):
+            var start_row = bins[b] - 1
+            var end_row: Int = self.qu_dist.rows
+            if b + 1 < len(bins):
+                end_row = bins[b + 1] - 1
+            if start_row >= end_row:
+                continue
             var total: Int64 = 0
             for col in range(self.qu_dist.cols):
-                total += self.qu_dist.get(row, col)
+                var s: Int64 = 0
+                for row in range(start_row, end_row):
+                    s += self.qu_dist.get(row, col)
+                total += s
             if total == 0:
                 continue
             var cum: Int64 = 0
             var q25_phred: Float64 = -1.0
             var median_phred: Float64 = -1.0
             for col in range(self.qu_dist.cols):
-                cum += self.qu_dist.get(row, col)
+                for row in range(start_row, end_row):
+                    cum += self.qu_dist.get(row, col)
                 if q25_phred < 0 and Float64(cum) >= 0.25 * Float64(total):
                     q25_phred = Float64(col) - Float64(offset)
                 if median_phred < 0 and Float64(cum) >= 0.5 * Float64(total):
@@ -244,14 +255,14 @@ struct QualityDistribution(Analyser, Copyable, Movable):
         var result_1 = result_panel(
             "qu_score_dis_base",
             self._get_status_per_base(),
-            "Quality Scores Distribtion",
+            "Per Base Sequence Quality",
             encoded_fig1,
         )
 
         var result_2 = result_panel(
             "qu_score_dis_seq",
             self._get_status_per_sequence(),
-            "Mean Quality distribution",
+            "Per Sequence Quality Scores",
             encoded_fig2,
         )
 

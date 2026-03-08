@@ -9,18 +9,26 @@ from blazeqc.html_maker import result_panel
 
 struct LengthDistribution(Analyser, Copyable, Movable):
     var length_vector: List[Int64]
+    var zero_length_count: Int
 
     fn __init__(out self):
         self.length_vector = List[Int64]()
+        self.zero_length_count = 0
 
     @always_inline
     fn tally_read(mut self, record: FastqRecord):
+        if len(record) == 0:
+            self.zero_length_count += 1
+            return
         while len(self.length_vector) < len(record):
             self.length_vector.append(0)
         self.length_vector[len(record) - 1] += 1
 
     @always_inline
     fn tally_read(mut self, record: RefRecord):
+        if len(record) == 0:
+            self.zero_length_count += 1
+            return
         while len(self.length_vector) < len(record):
             self.length_vector.append(0)
         self.length_vector[len(record) - 1] += 1
@@ -137,17 +145,16 @@ struct LengthDistribution(Analyser, Copyable, Movable):
         return fig
 
     fn _get_status(self) -> String:
-        # Error if any zero-length sequences exist (matching Java raisesError)
-        if len(self.length_vector) > 0 and self.length_vector[0] > 0:
+        # Error if any zero-length sequences exist (matching FastQC raisesError)
+        if self.zero_length_count > 0:
             return "fail"
-        # Warning if sequences have more than one distinct length (matching Java raisesWarning)
-        var seen_length = False
+        # Warning if sequences have more than one distinct length (matching FastQC raisesWarning)
+        var distinct_lengths: Int = 0
         for i in range(len(self.length_vector)):
             if self.length_vector[i] > 0:
-                if seen_length:
-                    return "warn"
-                else:
-                    seen_length = True
+                distinct_lengths += 1
+        if distinct_lengths > 1:
+            return "warn"
         return "pass"
 
     fn make_html(self) raises -> result_panel:
@@ -156,7 +163,7 @@ struct LengthDistribution(Analyser, Copyable, Movable):
         var result_1 = result_panel(
             "seq_len_dis",
             self._get_status(),
-            "Length Distribution",
+            "Sequence Length Distribution",
             encoded_fig1,
         )
 

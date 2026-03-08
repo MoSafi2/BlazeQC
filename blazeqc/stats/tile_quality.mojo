@@ -276,7 +276,7 @@ struct PerTileQuality(Analyser, Copyable, Movable):
             xticklabels=x_labels,
             ax=ax,
         )
-        ax.set_title("Quality per tile")
+        ax.set_title("Per tile quality")
         ax.set_xlabel("Position in read (bp)")
         ax.set_ylabel("Tile")
         return fig
@@ -294,7 +294,7 @@ struct PerTileQuality(Analyser, Copyable, Movable):
         var result_1 = result_panel(
             "tile_quality",
             self._get_status(),
-            "Quality per tile",
+            "Per Tile Sequence Quality",
             encoded_fig1,
         )
         return result_1^

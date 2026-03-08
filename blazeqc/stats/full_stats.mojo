@@ -128,7 +128,7 @@ struct FullStats(Copyable):
         var res = result_panel(
             "base_stats",
             "pass",
-            "Base Statistics",
+            "Basic Statistics",
             table_template,
             panel_type="table",
         )
@@ -160,8 +160,9 @@ struct FullStats(Copyable):
         var results = List[result_panel]()
         var base_stats = self.make_base_stats()
         var qu_html = self.qu_dist.make_html()
-        var quality_distribution_per_sequence = qu_html[0].copy()
-        var quality_distribution_bases = qu_html[1].copy()
+        # make_html returns (per_base_panel, per_sequence_panel)
+        var per_base_quality_panel = qu_html[0].copy()
+        var per_sequence_quality_panel = qu_html[1].copy()
         var bp_html = self.bp_dist.make_html(self.num_reads)
         var base_pair_N_percentage = bp_html[0].copy()
         var base_pair_distribution = bp_html[1].copy()
@@ -175,9 +176,9 @@ struct FullStats(Copyable):
 
 
         results.append(base_stats^)
-        results.append(quality_distribution_bases^)
+        results.append(per_sequence_quality_panel^)
         results.append(tile_quality^)
-        results.append(quality_distribution_per_sequence^)
+        results.append(per_base_quality_panel^)
         results.append(base_pair_distribution^)
         results.append(per_sequence_cg_content^)
         results.append(base_pair_N_percentage^)

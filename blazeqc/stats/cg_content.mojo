@@ -111,7 +111,7 @@ struct CGContent(Analyser, Copyable, Movable):
         var ax = x[1]
         ax.plot(arr, label="GC count per read")
         ax.plot(theoritical_distribution, label="Theoritical Distribution")
-        ax.set_title("Per sequence GC content")
+        ax.set_title("GC distribution over all sequences")
         ax.set_xlabel("Mean GC content (%)")
 
         return fig
@@ -124,7 +124,7 @@ struct CGContent(Analyser, Copyable, Movable):
         var result_1 = result_panel(
             "cg_content",
             self._get_status(),
-            "Per sequence GC content",
+            "Per Sequence GC Content",
             encoded_fig1,
         )
 

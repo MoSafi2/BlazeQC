@@ -124,7 +124,7 @@ struct AdapterContent[bits: Int = 3](Analyser):
         plt.legend(legend_labels)
         plt.xlabel("Position")
         plt.ylabel("Percentage of Reads")
-        plt.title("Adapter Content")
+        plt.title("Adapter content")
 
         return fig
 

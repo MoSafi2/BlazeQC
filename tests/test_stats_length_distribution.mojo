@@ -139,8 +139,9 @@ def test_get_size_distribution_interval_nonnegative():
 
 
 def test_length_dist_status_fail_zero_length():
+    # FastQC: error if any zero-length sequences exist
     var ld = LengthDistribution()
-    var rec = FastqRecord("r1", "A", "I")  # length 1 -> slot 0
+    var rec = FastqRecord("r1", "", "")  # zero length
     ld.tally_read(rec)
     assert_equal(ld._get_status(), "fail")
 
@@ -158,6 +159,14 @@ def test_length_dist_status_pass_single_length():
     var ld = LengthDistribution()
     var rec = FastqRecord("r1", "ACGT", "IIII")
     ld.tally_read(rec)
+    ld.tally_read(rec)
+    assert_equal(ld._get_status(), "pass")
+
+
+def test_length_dist_status_pass_single_length_one_base():
+    # Length-1 reads only: one distinct length -> pass (not fail)
+    var ld = LengthDistribution()
+    var rec = FastqRecord("r1", "A", "I")
     ld.tally_read(rec)
     assert_equal(ld._get_status(), "pass")
 

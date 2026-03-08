@@ -87,7 +87,7 @@ struct BasepairDistribution(Analyser):
         legend_labels.append("%A")
         ax.legend(legend_labels)
         ax.set_xlabel("Position in read (bp)")
-        ax.set_title("Base Distribution")
+        ax.set_title("Sequence content across all bases")
 
         var y = plt.subplots()
         var fig2 = y[0]
@@ -108,7 +108,7 @@ struct BasepairDistribution(Analyser):
         legend_labels_n.append("%N")
         ax2.legend(legend_labels_n)
         ax2.set_xlabel("Position in read (bp)")
-        ax2.set_title("N percentage")
+        ax2.set_title("N content across all bases")
 
         # Return (N figure, base figure) so make_html receives fig1=N, fig2=base
         return fig2, fig
@@ -174,13 +174,13 @@ struct BasepairDistribution(Analyser):
         var result_1 = result_panel(
             "n_percentage",
             self._get_status_n_content(),
-            "N percentage",
+            "Per Base N Content",
             encoded_fig1,
         )
         var result_2 = result_panel(
             "base_pair_distribution",
             self._get_status_sequence_content(),
-            "Base Distribution",
+            "Per Base Sequence Content",
             encoded_fig2,
         )
 

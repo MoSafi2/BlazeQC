@@ -188,7 +188,7 @@ struct DupReads(Analyser, Copyable, Movable):
         )
         ax.set_xticklabels(tick_labels)
         ax.set_xlabel("Sequence Duplication Level")
-        ax.set_title("Sequences Duplication levels")
+        ax.set_title("Sequence duplication levels")
         # ax.set_ylim(0, 100)
 
         ################################################################
@@ -239,7 +239,7 @@ struct DupReads(Analyser, Copyable, Movable):
         var result_1 = result_panel(
             "dup_reads",
             self._get_status_duplication(total_reads),
-            "Sequence Duplication Levels",
+            "Duplicate Sequences",
             encoded_fig1,
         )
 
@@ -254,7 +254,7 @@ struct DupReads(Analyser, Copyable, Movable):
         var result_2 = result_panel(
             "over_represented_seqs",
             "pass",
-            "Over-represented Sequences",
+            "Overrepresented Sequences",
             over_repr_table,
             panel_type="table",
         )
