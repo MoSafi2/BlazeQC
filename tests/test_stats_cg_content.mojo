@@ -105,7 +105,7 @@ def test_cg_content_tally_single_base_a():
 # ----- _get_status (pass/warn/fail) -----
 
 
-def test_cg_content_status_returns_pass_warn_or_fail() raises:
+def test_cg_content_status_returns_pass_warn_or_fail():
     var cg = CGContent()
     for _ in range(200):
         var rec = FastqRecord("r", "ACGTACGTACGT", "IIIIIIIIIIII")

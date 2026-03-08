@@ -78,14 +78,14 @@ struct CGContent(Analyser, Copyable, Movable):
         var theor = self.calculate_theoritical_distribution()
         var np = Python.import_module("numpy")
         var obs_arr = tensor_to_numpy_1d(self.cg_content)
-        var total_obs = Float64(np.sum(obs_arr))
-        var total_theor = Float64(np.sum(theor))
+        var total_obs = Float64(py=np.sum(obs_arr))
+        var total_theor = Float64(py=np.sum(theor))
         if total_obs <= 0 or total_theor <= 0:
             return 0.0
         var max_dev: Float64 = 0.0
         for i in range(len(self.cg_content)):
             var o_pct = (Float64(self.cg_content[i]) / total_obs) * 100.0
-            var t_val = Float64(theor[Int(i)])
+            var t_val = Float64(py=theor[Int(i)])
             var t_pct = (t_val / total_theor) * 100.0
             var dev = o_pct - t_pct
             if dev < 0:

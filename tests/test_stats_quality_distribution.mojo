@@ -162,8 +162,9 @@ def test_guess_schema_illumina_15():
 
 def test_quality_dist_status_per_base_pass():
     var qd = QualityDistribution()
+    # Use high Phred quality so quartile/median pass (e.g. '?' = 63 in ASCII -> Phred 30 in Sanger)
     for _ in range(100):
-        var rec = FastqRecord("r", "ACGTACGTACGT", "IIIIIIIIIIII")
+        var rec = FastqRecord("r", "ACGTACGTACGT", "????????????")
         qd.tally_read(rec)
     assert_equal(qd._get_status_per_base(), "pass")
 
@@ -171,7 +172,7 @@ def test_quality_dist_status_per_base_pass():
 def test_quality_dist_status_per_sequence_pass():
     var qd = QualityDistribution()
     for _ in range(100):
-        var rec = FastqRecord("r", "ACGTACGTACGT", "IIIIIIIIIIII")
+        var rec = FastqRecord("r", "ACGTACGTACGT", "????????????")
         qd.tally_read(rec)
     assert_equal(qd._get_status_per_sequence(), "pass")
 
