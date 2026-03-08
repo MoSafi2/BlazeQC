@@ -1,5 +1,6 @@
 """Base pair distribution (split from stats_.mojo)."""
 from collections.dict import Dict
+from collections.list import List
 from python import Python, PythonObject
 from blazeseq import FastqRecord, RefRecord
 from blazeqc.stats.analyser import Analyser
@@ -20,11 +21,20 @@ struct BasepairDistribution(Analyser):
     var max_length: Int
     var min_length: Int
     comptime WIDTH = 5
+    # Cache for prepare_data / get_module_data / data_plot
+    var _cache_bins: List[Int]
+    var _cache_binned_counts: Matrix2D[DType.int64]
+    var _cache_binned_pct: Matrix2D[DType.float64]
+    var _cache_ready: Bool
 
     fn __init__(out self):
         self.bp_dist = Matrix2D[DType.int64](1, self.WIDTH)
         self.max_length = 0
         self.min_length = Int.MAX
+        self._cache_bins = List[Int]()
+        self._cache_binned_counts = Matrix2D[DType.int64](0, 0)
+        self._cache_binned_pct = Matrix2D[DType.float64](0, 0)
+        self._cache_ready = False
 
     fn tally_read(mut self, record: FastqRecord):
         var rec_len = len(record)
@@ -123,6 +133,99 @@ struct BasepairDistribution(Analyser):
             self._plot_sequence_content(arr1, py_bins, bins),
         )
 
+    fn prepare_data(mut self, total_reads: Int64) raises:
+        """Compute binned sequence content and N content; store in cache for get_module_data/data_plot."""
+        var bins = make_linear_base_groups(self.max_length)
+        var n_bins = len(bins)
+        if n_bins == 0:
+            return
+        self._cache_binned_counts = Matrix2D[DType.int64](n_bins, self.WIDTH)
+        for g in range(n_bins):
+            var g_start = bins[g] - 1
+            var g_end: Int
+            if g + 1 < n_bins:
+                g_end = bins[g + 1] - 1
+            else:
+                g_end = self.max_length
+            for row in range(g_start, g_end):
+                for col in range(self.WIDTH):
+                    self._cache_binned_counts.add(g, col, self.bp_dist.get(row, col))
+        self._cache_binned_pct = Matrix2D[DType.float64](n_bins, self.WIDTH)
+        for g in range(n_bins):
+            var row_sum = self._cache_binned_counts.row_sum(g)
+            if row_sum > 0:
+                var t = Float64(row_sum)
+                for col in range(self.WIDTH):
+                    self._cache_binned_pct.set(
+                        g, col, 100.0 * Float64(self._cache_binned_counts.get(g, col)) / t
+                    )
+        self._cache_bins = bins^
+        self._cache_ready = True
+
+    fn get_module_data(self, total_reads: Int64) -> String:
+        """Return FastQC-style block text for Per Base Sequence Content and Per Base N Content from cache."""
+        if not self._cache_ready:
+            return ""
+        var out = ""
+        # Block 1: Per Base Sequence Content
+        out += ">>Per Base Sequence Content\t{}\n".format(self._get_status_sequence_content())
+        out += "#Base\tG\tA\tT\tC\n"
+        var n_bins = len(self._cache_bins)
+        for g in range(n_bins):
+            var start_bp = self._cache_bins[g]
+            var end_bp: Int
+            if g + 1 < n_bins:
+                end_bp = self._cache_bins[g + 1] - 1
+            else:
+                end_bp = self.max_length
+            var base_label: String
+            if end_bp - start_bp + 1 == 1:
+                base_label = String(start_bp)
+            else:
+                base_label = "{}-{}".format(start_bp, end_bp)
+            var gu = self._cache_binned_pct.get(g, 1)
+            var au = self._cache_binned_pct.get(g, 3)
+            var tu = self._cache_binned_pct.get(g, 2)
+            var cu = self._cache_binned_pct.get(g, 0)
+            out += "{}\t{}\t{}\t{}\t{}\n".format(base_label, gu, au, tu, cu)
+        out += ">>END_MODULE\n"
+        # Block 2: Per Base N Content
+        out += ">>Per Base N Content\t{}\n".format(self._get_status_n_content())
+        out += "#Base\tN-Count\n"
+        for g in range(n_bins):
+            var start_bp = self._cache_bins[g]
+            var end_bp: Int
+            if g + 1 < n_bins:
+                end_bp = self._cache_bins[g + 1] - 1
+            else:
+                end_bp = self.max_length
+            var base_label: String
+            if end_bp - start_bp + 1 == 1:
+                base_label = String(start_bp)
+            else:
+                base_label = "{}-{}".format(start_bp, end_bp)
+            var n_count = self._cache_binned_counts.get(g, 4)
+            out += "{}\t{}\n".format(base_label, n_count)
+        out += ">>END_MODULE\n"
+        return out
+
+    fn data_plot(self, total_reads: Int64) raises -> Tuple[PythonObject, PythonObject]:
+        """Plot from cache when ready; otherwise delegate to plot()."""
+        if self._cache_ready:
+            var np = Python.import_module("numpy")
+            var arr = matrix_to_numpy(self._cache_binned_pct)
+            var slice_all = Python.evaluate("slice(None)")
+            var arr1 = arr.__getitem__(Python.tuple(slice_all, Python.evaluate("slice(0, 4)")))
+            var arr2 = arr.__getitem__(Python.tuple(slice_all, Python.evaluate("slice(4, 5)")))
+            var py_bins = Python.list()
+            for i in range(len(self._cache_bins)):
+                py_bins.append(self._cache_bins[i])
+            return (
+                self._plot_n_content(arr2, py_bins, self._cache_bins),
+                self._plot_sequence_content(arr1, py_bins, self._cache_bins),
+            )
+        return self.plot(total_reads)
+
     fn _get_status_n_content(self) -> String:
         """Max N% at any position (FastQC n_content)."""
         var max_n_pct: Float64 = 0.0
@@ -177,7 +280,7 @@ struct BasepairDistribution(Analyser):
     fn make_html(
         self, total_reads: Int64
     ) raises -> Tuple[result_panel, result_panel]:
-        fig1, fig2 = self.plot(total_reads)
+        fig1, fig2 = self.data_plot(total_reads)
         var encoded_fig1 = encode_img_b64(fig1)
         var encoded_fig2 = encode_img_b64(fig2)
         # fig1 = N figure, fig2 = base figure (see plot() return order)

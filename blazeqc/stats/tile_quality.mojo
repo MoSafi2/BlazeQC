@@ -43,6 +43,11 @@ struct PerTileQuality(Analyser, Copyable, Movable):
     var max_length: Int
     var enabled: Bool
     var max_deviation: Float64
+    # Cache for prepare_data / get_module_data / data_plot
+    var _cache_tile_ids: List[Int]
+    var _cache_groups: List[Int]
+    var _cache_means: Matrix2D[DType.float64]
+    var _cache_ready: Bool
 
     fn __init__(out self):
         self.map = Dict[Int, TileQualityEntry](
@@ -52,6 +57,10 @@ struct PerTileQuality(Analyser, Copyable, Movable):
         self.max_length = 0
         self.enabled = True
         self.max_deviation = 0.0
+        self._cache_tile_ids = List[Int]()
+        self._cache_groups = List[Int]()
+        self._cache_means = Matrix2D[DType.float64](0, 0)
+        self._cache_ready = False
 
     fn tally_read(mut self, record: FastqRecord):
         if not self.enabled:
@@ -281,6 +290,55 @@ struct PerTileQuality(Analyser, Copyable, Movable):
         ax.set_ylabel("Tile")
         return fig
 
+    fn prepare_data(mut self) raises:
+        """Compute tile_ids, groups, deviation means and store in cache for get_module_data/data_plot."""
+        var tile_ids = self._sorted_tile_ids()
+        var n_tiles = len(tile_ids)
+        var groups = make_linear_base_groups(self.max_length)
+        var means = self._compute_group_means(tile_ids, groups)
+        var n_groups = len(groups)
+        self.max_deviation = self._subtract_group_averages(means, n_tiles, n_groups)
+        self._cache_tile_ids = tile_ids^
+        self._cache_groups = groups^
+        self._cache_means = means^
+        self._cache_ready = True
+
+    fn get_module_data(self) -> String:
+        """Return FastQC-style block text for Per Tile Sequence Quality from cache."""
+        if not self._cache_ready:
+            return ""
+        var status = self._get_status()
+        var out = ">>Per Tile Sequence Quality\t{}\n".format(status)
+        out += "#Tile\tBase\tMean\n"
+        var n_tiles = len(self._cache_tile_ids)
+        var n_groups = len(self._cache_groups)
+        for t in range(n_tiles):
+            var tile_id = self._cache_tile_ids[t]
+            for g in range(n_groups):
+                var start_bp = self._cache_groups[g]
+                var end_bp: Int
+                if g + 1 < n_groups:
+                    end_bp = self._cache_groups[g + 1] - 1
+                else:
+                    end_bp = self.max_length
+                var base_label: String
+                if end_bp - start_bp + 1 == 1:
+                    base_label = String(start_bp)
+                else:
+                    base_label = "{}-{}".format(start_bp, end_bp)
+                var mean_val = self._cache_means.get(t, g)
+                out += "{}\t{}\t{}\n".format(tile_id, base_label, mean_val)
+        out += ">>END_MODULE\n"
+        return out
+
+    fn data_plot(mut self) raises -> PythonObject:
+        """Plot from cache; falls back to plot() if cache not ready."""
+        if self._cache_ready:
+            return self._draw_heatmap(
+                self._cache_means, self._cache_tile_ids, self._cache_groups
+            )
+        return self.plot()
+
     fn _get_status(self) -> String:
         if self.max_deviation > TILE_ERROR:
             return "fail"
@@ -289,7 +347,7 @@ struct PerTileQuality(Analyser, Copyable, Movable):
         return "pass"
 
     fn make_html(mut self) raises -> result_panel:
-        fig1 = self.plot()
+        fig1 = self.data_plot()
         var encoded_fig1 = encode_img_b64(fig1)
         var result_1 = result_panel(
             "tile_quality",

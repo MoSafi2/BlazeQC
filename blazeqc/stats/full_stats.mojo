@@ -1,5 +1,7 @@
 """FullStats aggregate (split from stats_.mojo)."""
 
+from collections.dict import Dict
+from collections.list import List
 from python import Python, PythonObject
 from blazeseq import FastqRecord, RefRecord
 from blazeqc.stats.analyser import Analyser
@@ -18,6 +20,8 @@ from blazeqc.html_maker import (
     format_length,
 )
 
+# ----- Report data (FastQC-style data file) -----
+# FullStats.write_data(file_name) writes ##BlazeQC, basic stats, then each module's write_module_data(f).
 
 @fieldwise_init
 struct FullStats(Copyable):
@@ -31,7 +35,7 @@ struct FullStats(Copyable):
     var tile_qual: PerTileQuality
     var adpt_cont: AdapterContent[3]
 
-    fn __init__(out self):
+    fn __init__(out self) raises:
         self.num_reads = 0
         self.total_bases = 0
         self.len_dist = LengthDistribution()
@@ -153,50 +157,164 @@ struct FullStats(Copyable):
 
         return plots^
 
-    fn make_html(mut self, file_name: String) raises:
-        var py_dt = Python.import_module("datetime")
-        var dt_now = py_dt.datetime.now().strftime("%a %d %b %Y")
+    fn prepare_data(mut self, file_name: String) raises:
+        """Fill all module caches. Call before write_data and build_panels."""
+        self.qu_dist.prepare_data()
+        self.tile_qual.prepare_data()
+        self.bp_dist.prepare_data(self.num_reads)
+        self.cg_content.prepare_data()
+        self.len_dist.prepare_data()
+        self.dup_reads.prepare_data(Int(self.num_reads))
+        self.adpt_cont.prepare_data(self.num_reads)
 
-        var results = List[result_panel]()
+    fn write_data(mut self, file_name: String) raises:
+        """Write FastQC-style data file. Calls prepare_data then writes each module block."""
+        self.prepare_data(file_name)
+
+        with open("{}_blazeseq_data.txt".format(file_name), "w") as f:
+            f.write("##BlazeQC\t0.12.1\n")
+
+            # Basic Statistics
+            var sum: Int64 = 0
+            for i in range(len(self.cg_content.cg_content)):
+                sum += self.cg_content.cg_content[i] * i
+            var avg_cg = sum / self.num_reads
+            var schema = self.qu_dist._guess_schema()
+            var total_bases_str = format_length(Float64(self.total_bases))
+            var lengths: String
+            if self.bp_dist.max_length == self.bp_dist.min_length:
+                lengths = String(self.bp_dist.max_length)
+            else:
+                lengths = "{}-{}".format(
+                    self.bp_dist.min_length, self.bp_dist.max_length
+                )
+            var filename_display = file_name
+            if file_name.find("/") >= 0:
+                filename_display = String(file_name.split("/")[-1])
+            f.write(">>Basic Statistics\tpass\n")
+            f.write("#Measure\tValue\n")
+            f.write("Filename\t{}\n".format(filename_display))
+            f.write("File type\tConventional base calls\n")
+            f.write("Encoding\t{}\n".format(schema.SCHEMA))
+            f.write("Total Sequences\t{}\n".format(self.num_reads))
+            f.write("Total Bases\t{}\n".format(total_bases_str))
+            f.write("Sequences flagged as poor quality\t0\n")
+            f.write("Sequence length\t{}\n".format(lengths))
+            f.write("%GC\t{}\n".format(avg_cg))
+            f.write(">>END_MODULE\n")
+
+            # Module blocks in panel order (each returns its block text)
+            f.write(self.qu_dist.get_module_data())
+            f.write(self.tile_qual.get_module_data())
+            f.write(self.bp_dist.get_module_data(self.num_reads))
+            f.write(self.cg_content.get_module_data())
+            f.write(self.len_dist.get_module_data())
+            f.write(self.dup_reads.get_module_data(Int(self.num_reads)))
+            f.write(self.adpt_cont.get_module_data(self.num_reads))
+
+    fn build_panels(mut self) raises -> Dict[String, result_panel]:
+        var panels = Dict[String, result_panel]()
         var base_stats = self.make_base_stats()
+        panels[base_stats.legand] = base_stats^
+
         var qu_html = self.qu_dist.make_html()
-        # make_html returns (per_base_panel, per_sequence_panel)
         var per_base_quality_panel = qu_html[0].copy()
         var per_sequence_quality_panel = qu_html[1].copy()
+        panels[per_sequence_quality_panel.legand] = per_sequence_quality_panel^
+        panels[per_base_quality_panel.legand] = per_base_quality_panel^
+
+        var tile_quality = self.tile_qual.make_html()
+        panels[tile_quality.legand] = tile_quality^
+
         var bp_html = self.bp_dist.make_html(self.num_reads)
         var base_pair_N_percentage = bp_html[0].copy()
         var base_pair_distribution = bp_html[1].copy()
+        panels[base_pair_distribution.legand] = base_pair_distribution^
+        panels[base_pair_N_percentage.legand] = base_pair_N_percentage^
+
         var per_sequence_cg_content = self.cg_content.make_html()
+        panels[per_sequence_cg_content.legand] = per_sequence_cg_content^
+
         var sequence_length_distribution = self.len_dist.make_html()
+        panels[sequence_length_distribution.legand] = sequence_length_distribution^
+
         var dup_html = self.dup_reads.make_html(Int(self.num_reads))
         var sequence_duplication_levels = dup_html[0].copy()
         var overrepresented_sequences = dup_html[1].copy()
-        var tile_quality = self.tile_qual.make_html()
+        panels[sequence_duplication_levels.legand] = sequence_duplication_levels^
+        panels[overrepresented_sequences.legand] = overrepresented_sequences^
+
         var adapter_content = self.adpt_cont.make_html(self.num_reads)
+        panels[adapter_content.legand] = adapter_content^
+
+        return panels^
+
+    fn orchestrate(mut self, file_name: String) raises:
+        self.write_data(file_name)  # write data file before any plotting
+        var panels = self.build_panels()
+        var html = render_html(panels.copy(), file_name)
+        write_html_file(html, file_name)
+        write_summary_file(panels, file_name)
+
+    fn make_html(mut self, file_name: String) raises:
+        self.orchestrate(file_name)
 
 
-        results.append(base_stats^)
-        results.append(per_sequence_quality_panel^)
-        results.append(tile_quality^)
-        results.append(per_base_quality_panel^)
-        results.append(base_pair_distribution^)
-        results.append(per_sequence_cg_content^)
-        results.append(base_pair_N_percentage^)
-        results.append(sequence_length_distribution^)
-        results.append(sequence_duplication_levels^)
-        results.append(overrepresented_sequences^)
-        results.append(adapter_content^)
+fn render_html(
+    panels: Dict[String, result_panel], file_name: String
+) raises -> String:
+    var order = _panel_order()
+    var html: String = html_template
+    for name in order:
+        html = insert_result_panel(html, panels[name])
+    while html.find("<<filename>>") > -1:
+        html = html.replace("<<filename>>", file_name)
+    var py_dt = Python.import_module("datetime")
+    var dt_now = py_dt.datetime.now().strftime("%a %d %b %Y")
+    while html.find("<<date>>") > -1:
+        html = html.replace("<<date>>", String(dt_now))
+    return html
 
-        var html: String = html_template
-        for entry in results:
-            html = insert_result_panel(html, entry)
 
-        while html.find("<<filename>>") > -1:
-            html = html.replace("<<filename>>", file_name)
+fn write_html_file(html: String, file_name: String) raises:
+    with open("{}_blazeseq.html".format(file_name), "w") as f:
+        print("{}_blazeseq.html".format(file_name))
+        f.write(html)
 
-        while html.find("<<date>>") > -1:
-            html = html.replace("<<date>>", String(dt_now))
 
-        with open("{}_blazeseq.html".format(file_name), "w") as f:
-            print("{}_blazeseq.html".format(file_name))
-            f.write(html)
+fn write_summary_file(
+    panels: Dict[String, result_panel], file_name: String
+) raises:
+    var order = _panel_order()
+    with open("{}_blazeseq_summary.txt".format(file_name), "w") as f:
+        for name in order:
+            var line = _summary_line(panels[name].grade, name, file_name)
+            f.write(line)
+            f.write("\n")
+
+
+fn _panel_order() raises -> List[String]:
+    var order = List[String]()
+    order.append("Basic Statistics")
+    order.append("Per Sequence Quality Scores")
+    order.append("Per Tile Sequence Quality")
+    order.append("Per Base Sequence Quality")
+    order.append("Per Base Sequence Content")
+    order.append("Per Sequence GC Content")
+    order.append("Per Base N Content")
+    order.append("Sequence Length Distribution")
+    order.append("Duplicate Sequences")
+    order.append("Overrepresented Sequences")
+    order.append("Adapter Content")
+    return order^
+
+
+fn _summary_line(grade: String, module_name: String, file_name: String) -> String:
+    var status: String
+    if grade == "pass":
+        status = "PASS"
+    elif grade == "warn":
+        status = "WARN"
+    else:
+        status = "FAIL"
+    return "{}\t{}\t{}".format(status, module_name, file_name)

@@ -1,6 +1,7 @@
 """Duplication and over-represented sequences (split from stats_.mojo)."""
 
 from collections.dict import Dict
+from collections.list import List
 from python import Python, PythonObject
 from blazeseq import FastqRecord, RefRecord
 from blazeqc.stats.analyser import Analyser
@@ -16,6 +17,9 @@ struct DupReads(Analyser, Copyable, Movable):
     var count_at_max: Int
     var n: Int
     var corrected_counts: Dict[Int, Float64]
+    var _cache_dup_percentages: List[Float64]
+    var _cache_overrepresented: List[OverRepresentedSequence]
+    var _cache_ready: Bool
     comptime MAX_READS = 100_000
 
     fn __init__(out self):
@@ -26,6 +30,9 @@ struct DupReads(Analyser, Copyable, Movable):
         self.count_at_max = 0
         self.n = 0
         self.corrected_counts = Dict[Int, Float64]()
+        self._cache_dup_percentages = List[Float64]()
+        self._cache_overrepresented = List[OverRepresentedSequence]()
+        self._cache_ready = False
 
     # TODO: Check if the Stringslice to String Conversion is right
     fn tally_read(mut self, record: FastqRecord):
@@ -222,6 +229,92 @@ struct DupReads(Analyser, Copyable, Movable):
             return 100.0
         return (dedup_total / raw_total) * 100.0
 
+    fn prepare_data(mut self, total_reads: Int):
+        """Compute corrected duplication percentages and overrepresented list; store in cache."""
+        self.predict_reads()
+        var total_percentages = List[Float64](capacity=16)
+        for _ in range(16):
+            total_percentages.append(0)
+        for entry in self.corrected_counts.items():
+            var count = entry.value
+            var dup_level = entry.key
+            var dup_slot = min(max(dup_level - 1, 0), 15)
+            if dup_slot > 9999 or dup_slot < 0:
+                dup_slot = 15
+            elif dup_slot > 4999:
+                dup_slot = 14
+            elif dup_slot > 999:
+                dup_slot = 13
+            elif dup_slot > 499:
+                dup_slot = 12
+            elif dup_slot > 99:
+                dup_slot = 11
+            elif dup_slot > 49:
+                dup_slot = 10
+            elif dup_slot > 9:
+                dup_slot = 9
+            total_percentages[dup_slot] += count * dup_level
+
+        self._cache_dup_percentages = List[Float64](capacity=16)
+        for i in range(16):
+            self._cache_dup_percentages.append(
+                (total_percentages[i] / Float64(total_reads)) * Float64(100)
+            )
+
+        var overrepresented_seqs = List[OverRepresentedSequence]()
+        for key in self.unique_dict.items():
+            var seq_precent = (Float64(key.value) / Float64(self.n)) * 100.0
+            if seq_precent > 0.1:
+                overrepresented_seqs.append(
+                    OverRepresentedSequence(
+                        String(key.key), key.value, seq_precent, String("No Hit")
+                    )
+                )
+        sort[cmp_fn=cmp_over_repr](overrepresented_seqs)
+        self._cache_overrepresented = overrepresented_seqs^
+        self._cache_ready = True
+
+    fn get_module_data(mut self, total_reads: Int) -> String:
+        """Return FastQC-style block text for Duplicate Sequences and Overrepresented Sequences from cache."""
+        if not self._cache_ready:
+            return ""
+        var out = ""
+        out += ">>Duplicate Sequences\t{}\n".format(self._get_status_duplication(total_reads))
+        out += "#Duplication Level\tPercentage of total\n"
+        var tick_labels = List[String]()
+        tick_labels.append("1"); tick_labels.append("2"); tick_labels.append("3"); tick_labels.append("4"); tick_labels.append("5"); tick_labels.append("6"); tick_labels.append("7"); tick_labels.append("8"); tick_labels.append("9")
+        tick_labels.append(">10"); tick_labels.append(">50"); tick_labels.append(">100"); tick_labels.append(">500"); tick_labels.append(">1k"); tick_labels.append(">5k"); tick_labels.append(">10k+")
+        for i in range(len(self._cache_dup_percentages)):
+            out += "{}\t{}\n".format(tick_labels[i], self._cache_dup_percentages[i])
+        out += ">>END_MODULE\n"
+        out += ">>Overrepresented sequences\tpass\n"
+        out += "#Sequence\tCount\tPercentage\tPossible Source\n"
+        for entry in self._cache_overrepresented:
+            out += "{}\t{}\t{}\t{}\n".format(entry.seq, entry.count, entry.percentage, entry.hit)
+        out += ">>END_MODULE\n"
+        return out
+
+    fn data_plot(mut self, total_reads: Int) raises -> Tuple[PythonObject, List[OverRepresentedSequence]]:
+        """Plot from cache when ready; otherwise delegate to plot()."""
+        if self._cache_ready:
+            var plt = Python.import_module("matplotlib.pyplot")
+            var final_arr = list_float64_to_numpy(self._cache_dup_percentages)
+            var f = plt.subplots()
+            var fig = f[0]
+            var ax = f[1]
+            ax.plot(final_arr)
+            var tick_positions = Python.list(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15)
+            ax.set_xticks(tick_positions)
+            var tick_labels = Python.list(
+                "1", "2", "3", "4", "5", "6", "7", "8", "9",
+                ">10", ">50", ">100", ">500", ">1k", ">5k", ">10k+",
+            )
+            ax.set_xticklabels(tick_labels)
+            ax.set_xlabel("Sequence Duplication Level")
+            ax.set_title("Sequence duplication levels")
+            return (fig^, self._cache_overrepresented.copy())
+        return self.plot(total_reads)
+
     fn _get_status_duplication(mut self, total_reads: Int) -> String:
         var pct = self._percent_remaining_after_dedup(total_reads)
         if pct < DUPLICATION_ERROR:
@@ -233,7 +326,7 @@ struct DupReads(Analyser, Copyable, Movable):
     fn make_html(
         mut self, total_reads: Int
     ) raises -> Tuple[result_panel, result_panel]:
-        var plot_result = self.plot(total_reads)
+        var plot_result = self.data_plot(total_reads)
         var fig = plot_result[0]
         var encoded_fig1 = encode_img_b64(fig)
         var result_1 = result_panel(

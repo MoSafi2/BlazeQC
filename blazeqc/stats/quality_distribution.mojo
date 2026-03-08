@@ -35,8 +35,20 @@ struct QualityDistribution(Analyser, Copyable, Movable):
     var max_length: Int
     var max_qu: UInt8
     var min_qu: UInt8
+    # Cache for prepare_data / data_plot / get_module_data
+    var _cache_mean_line: PythonObject
+    var _cache_boxplot_stats: PythonObject
+    var _cache_py_bins: PythonObject
+    var _cache_bins: List[Int]
+    var _cache_arr2: PythonObject
+    var _cache_schema_offset: Int
+    var _cache_min_index: Int
+    var _cache_p10: PythonObject
+    var _cache_p90: PythonObject
+    var _cache_nrows: Int
+    var _cache_ready: Bool
 
-    fn __init__(out self):
+    fn __init__(out self) raises:
         self.qu_dist = Matrix2D[DType.int64](1, 128)
         self.qu_dist_seq = List[Int64](capacity=128)
         for _ in range(128):
@@ -44,6 +56,18 @@ struct QualityDistribution(Analyser, Copyable, Movable):
         self.max_length = 0
         self.max_qu = 0
         self.min_qu = 128
+        self._cache_bins = List[Int]()
+        var py_none = Python.evaluate("None")
+        self._cache_mean_line = py_none
+        self._cache_boxplot_stats = py_none
+        self._cache_py_bins = py_none
+        self._cache_arr2 = py_none
+        self._cache_p10 = py_none
+        self._cache_p90 = py_none
+        self._cache_schema_offset = 0
+        self._cache_min_index = 0
+        self._cache_nrows = 0
+        self._cache_ready = False
 
     fn tally_read(mut self, record: FastqRecord):
         if len(record) > self.max_length:
@@ -252,7 +276,7 @@ struct QualityDistribution(Analyser, Copyable, Movable):
         return "pass"
 
     fn make_html(self) raises -> Tuple[result_panel, result_panel]:
-        fig1, fig2 = self.plot()
+        fig1, fig2 = self.data_plot()
         var encoded_fig1 = encode_img_b64(fig1)
         var encoded_fig2 = encode_img_b64(fig2)
         var result_1 = result_panel(
@@ -270,6 +294,118 @@ struct QualityDistribution(Analyser, Copyable, Movable):
         )
 
         return (result_1^, result_2^)
+
+    fn prepare_data(mut self) raises:
+        """Compute and cache per-base and per-sequence quality data for data_plot and get_module_data."""
+        var np = Python.import_module("numpy")
+        var schema = self._guess_schema()
+        var arr = matrix_to_numpy(self.qu_dist)
+        var min_index = schema.OFFSET
+        var max_qu_int = Int(self.max_qu)
+        var max_index = 40 if 40 > max_qu_int else max_qu_int
+        arr = self.slice_array(arr, Int(min_index), Int(max_index))
+        var bins = make_linear_base_groups(self.max_length)
+        var py_bins: PythonObject
+        arr, py_bins = bin_array(arr, bins, func="mean")
+
+        var nrows = Int(py=arr.shape[0])
+        var ncols = Int(py=arr.shape[1])
+        var mean_line = np.sum(
+            arr * np.arange(1, ncols + 1), axis=1
+        ) / np.sum(arr, axis=1)
+        var cum_sum = np.cumsum(arr, axis=1)
+        var total_counts = np.reshape(np.sum(arr, axis=1), Python.tuple(nrows, 1))
+        var median = np.argmax(cum_sum > total_counts / 2, axis=1)
+        var Q75 = np.argmax(cum_sum > total_counts * 0.75, axis=1)
+        var Q25 = np.argmax(cum_sum > total_counts * 0.25, axis=1)
+        var p10 = np.argmax(cum_sum > total_counts * 0.1, axis=1)
+        var p90 = np.argmax(cum_sum > total_counts * 0.9, axis=1)
+        var IQR = Q75 - Q25
+        var py_none = Python.evaluate("None")
+        var whislo = np.full(len(IQR), py_none)
+        var whishi = np.full(len(IQR), py_none)
+        var boxplot_stats = Python.list()
+        for i in range(len(IQR)):
+            var stat: PythonObject = Python.dict()
+            stat["med"] = median[i]
+            stat["q1"] = Q25[i]
+            stat["q3"] = Q75[i]
+            stat["whislo"] = whislo[i]
+            stat["whishi"] = whishi[i]
+            boxplot_stats.append(stat)
+
+        var index = 0
+        for i in range(len(self.qu_dist_seq) - 1, -1, -1):
+            if self.qu_dist_seq[i] != 0:
+                index = i
+                break
+        var arr2 = tensor_to_numpy_1d(self.qu_dist_seq)
+        arr2 = arr2[Int(schema.OFFSET) : index + 2]
+
+        self._cache_mean_line = mean_line
+        self._cache_boxplot_stats = boxplot_stats
+        self._cache_py_bins = py_bins
+        self._cache_bins = bins^
+        self._cache_arr2 = arr2
+        self._cache_schema_offset = Int(schema.OFFSET)
+        self._cache_min_index = Int(min_index)
+        self._cache_p10 = p10
+        self._cache_p90 = p90
+        self._cache_nrows = nrows
+        self._cache_ready = True
+
+    fn get_module_data(self) raises -> String:
+        """Return FastQC-style block text for Per Sequence Quality and Per Base Sequence Quality."""
+        if not self._cache_ready:
+            return ""
+        var out = String()
+        var status_base = self._get_status_per_base()
+        var status_seq = self._get_status_per_sequence()
+        # Per base sequence quality
+        out += ">>Per base sequence quality\t{}\n".format(status_base)
+        out += "#Base\tMean\tMedian\tLower Quartile\tUpper Quartile\t10th Percentile\t90th Percentile\n"
+        for i in range(self._cache_nrows):
+            var start_bp = self._cache_bins[i]
+            var end_bp: Int = self.max_length
+            if i + 1 < len(self._cache_bins):
+                end_bp = self._cache_bins[i + 1] - 1
+            var base_label: String
+            if start_bp == end_bp:
+                base_label = String(start_bp)
+            else:
+                base_label = "{}-{}".format(start_bp, end_bp)
+            # Slice columns are 0-based phred (column 0 = phred 0). mean_line is 1-based index; median/q1/q3/p10/p90 are 0-based.
+            var mean_val = Float64(py=self._cache_mean_line[i]) - 1.0
+            var med_val = Float64(py=self._cache_boxplot_stats[i]["med"])
+            var q1_val = Float64(py=self._cache_boxplot_stats[i]["q1"])
+            var q3_val = Float64(py=self._cache_boxplot_stats[i]["q3"])
+            var p10_val = Float64(py=self._cache_p10[i])
+            var p90_val = Float64(py=self._cache_p90[i])
+            out += "{}\t{}\t{}\t{}\t{}\t{}\t{}\n".format(base_label, mean_val, med_val, q1_val, q3_val, p10_val, p90_val)
+        out += ">>END_MODULE\n"
+        # Per sequence quality scores
+        out += ">>Per sequence quality scores\t{}\n".format(status_seq)
+        out += "#Quality\tCount\n"
+        var arr2 = self._cache_arr2
+        var n_seq = Int(py=arr2.shape[0])
+        for i in range(n_seq):
+            var q_val = Float64(i) + Float64(self._cache_schema_offset)
+            var c_val = Float64(py=arr2[i])
+            out += "{}\t{}\n".format(q_val, c_val)
+        out += ">>END_MODULE\n"
+        return out
+
+    fn data_plot(self) raises -> Tuple[PythonObject, PythonObject]:
+        """Plot from cached data. Call prepare_data() first."""
+        return Tuple(
+            self._plot_per_base_quality(
+                self._cache_mean_line,
+                self._cache_boxplot_stats,
+                self._cache_bins,
+                self._cache_py_bins,
+            ),
+            self._plot_per_sequence_quality(self._cache_arr2),
+        )
 
     fn _guess_schema(self) -> QualitySchema:
         comptime SANGER_ENCODING_OFFSET = 33

@@ -22,12 +22,16 @@ struct AdapterContent[bits: Int = 3](Analyser):
     var hash_counts: Matrix2D[DType.int64]
     var hash_list: List[UInt64]
     var max_length: Int
+    var _cache_pct: Matrix2D[DType.float64]
+    var _cache_ready: Bool
 
     fn __init__(out self, var hashes: List[UInt64], kmer_len: Int = 0):
         self.kmer_len = min(kmer_len, 64 // Self.bits)
         self.hash_list = hashes^
         self.hash_counts = Matrix2D[DType.int64](len(self.hash_list), 1)
         self.max_length = 0
+        self._cache_pct = Matrix2D[DType.float64](0, 0)
+        self._cache_ready = False
 
     fn __copyinit__(out self, existing: Self):
         self.kmer_len = existing.kmer_len
@@ -41,6 +45,13 @@ struct AdapterContent[bits: Int = 3](Analyser):
         for i in range(len(existing.hash_list)):
             self.hash_list.append(existing.hash_list[i])
         self.max_length = existing.max_length
+        self._cache_pct = Matrix2D[DType.float64](
+            existing._cache_pct.rows, existing._cache_pct.cols
+        )
+        for i in range(existing._cache_pct.rows):
+            for j in range(existing._cache_pct.cols):
+                self._cache_pct.set(i, j, existing._cache_pct.get(i, j))
+        self._cache_ready = existing._cache_ready
 
     @always_inline
     fn tally_read(mut self, record: FastqRecord):
@@ -128,6 +139,71 @@ struct AdapterContent[bits: Int = 3](Analyser):
 
         return fig
 
+    fn prepare_data(mut self, total_reads: Int64):
+        """Compute position-wise adapter percentages and cache for get_module_data/data_plot."""
+        if total_reads <= 0:
+            return
+        var rows = self.hash_counts.rows
+        var cols = self.hash_counts.cols
+        self._cache_pct = Matrix2D[DType.float64](rows, cols)
+        var t = Float64(total_reads)
+        for i in range(rows):
+            for j in range(cols):
+                self._cache_pct.set(
+                    i, j, 100.0 * Float64(self.hash_counts.get(i, j)) / t
+                )
+        self._cache_ready = True
+
+    fn get_module_data(self, total_reads: Int64) -> String:
+        """Return FastQC-style block text for Adapter Content from cache (#Position + adapter columns)."""
+        if not self._cache_ready:
+            return ""
+        var adapter_names = List[String]()
+        adapter_names.append("Illumina Universal Adapter")
+        adapter_names.append("Illumina Small RNA 3' Adapter")
+        adapter_names.append("Illumina Small RNA 5' Adapter")
+        adapter_names.append("Nextera Transposase Sequence")
+        adapter_names.append("PolyA")
+        adapter_names.append("PolyG")
+        var out = ">>Adapter Content\t{}\n".format(self._get_status(total_reads))
+        out += "#Position"
+        for i in range(min(6, self._cache_pct.rows)):
+            out += "\t" + adapter_names[i]
+        out += "\n"
+        for j in range(self._cache_pct.cols):
+            out += String(j + 1)
+            for i in range(self._cache_pct.rows):
+                out += "\t" + String(self._cache_pct.get(i, j))
+            out += "\n"
+        out += ">>END_MODULE\n"
+        return out
+
+    fn data_plot(self, total_reads: Int64) raises -> PythonObject:
+        """Plot from cache when ready; otherwise delegate to plot()."""
+        if self._cache_ready:
+            var plt = Python.import_module("matplotlib.pyplot")
+            var np = Python.import_module("numpy")
+            var arr = matrix_to_numpy(self._cache_pct)
+            var arr_t = np.transpose(arr)
+            var z = plt.subplots()
+            var fig = z[0]
+            var ax = z[1]
+            ax.plot(arr_t)
+            ax.set_ylim(0, 100)
+            var legend_labels = Python.list()
+            legend_labels.append("Illumina Universal Adapter")
+            legend_labels.append("Illumina Small RNA 3' Adapter")
+            legend_labels.append("Illumina Small RNA 5' Adapter")
+            legend_labels.append("Nextera Transposase Sequence")
+            legend_labels.append("PolyA")
+            legend_labels.append("PolyG")
+            plt.legend(legend_labels)
+            plt.xlabel("Position")
+            plt.ylabel("Percentage of Reads")
+            plt.title("Adapter content")
+            return fig
+        return self.plot(total_reads)
+
     fn _get_status(self, total_reads: Int64) -> String:
         # Warn if read length too short to analyse adapter (kmer_len)
         if total_reads == 0:
@@ -148,7 +224,7 @@ struct AdapterContent[bits: Int = 3](Analyser):
         return "pass"
 
     fn make_html(self, total_reads: Int64) raises -> result_panel:
-        fig1 = self.plot(total_reads)
+        fig1 = self.data_plot(total_reads)
         var encoded_fig1 = encode_img_b64(fig1)
         var result_1 = result_panel(
             "adapter_content",

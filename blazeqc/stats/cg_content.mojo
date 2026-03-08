@@ -12,14 +12,18 @@ from blazeqc.limits import GC_SEQUENCE_WARN, GC_SEQUENCE_ERROR
 struct CGContent(Analyser, Copyable, Movable):
     var cg_content: List[Int64]
     var theoritical_distribution: List[Int64]
+    var _cache_theoretical: PythonObject
+    var _cache_ready: Bool
 
-    fn __init__(out self):
+    fn __init__(out self) raises:
         self.cg_content = List[Int64](capacity=101)
         for _ in range(101):
             self.cg_content.append(0)
         self.theoritical_distribution = List[Int64](capacity=101)
         for _ in range(101):
             self.theoritical_distribution.append(0)
+        self._cache_theoretical = Python.evaluate("None")
+        self._cache_ready = False
 
     fn tally_read(mut self, record: FastqRecord):
         if len(record) == 0:
@@ -94,6 +98,37 @@ struct CGContent(Analyser, Copyable, Movable):
                 max_dev = dev
         return max_dev
 
+    fn prepare_data(mut self) raises:
+        """Compute theoretical distribution and cache for get_module_data/data_plot."""
+        self._cache_theoretical = self.calculate_theoritical_distribution()
+        self._cache_ready = True
+
+    fn get_module_data(self) raises -> String:
+        """Return FastQC-style block text for Per Sequence GC Content from cache (cg_content counts)."""
+        if not self._cache_ready:
+            return ""
+        var out = ">>Per Sequence GC Content\t{}\n".format(self._get_status())
+        out += "#GC Content\tCount\n"
+        for i in range(len(self.cg_content)):
+            out += "{}\t{}\n".format(i, self.cg_content[i])
+        out += ">>END_MODULE\n"
+        return out
+
+    fn data_plot(self) raises -> PythonObject:
+        """Plot from cache when ready; otherwise delegate to plot()."""
+        if self._cache_ready:
+            var plt = Python.import_module("matplotlib.pyplot")
+            var arr = tensor_to_numpy_1d(self.cg_content)
+            var x = plt.subplots()
+            var fig = x[0]
+            var ax = x[1]
+            ax.plot(arr, label="GC count per read")
+            ax.plot(self._cache_theoretical, label="Theoritical Distribution")
+            ax.set_title("GC distribution over all sequences")
+            ax.set_xlabel("Mean GC content (%)")
+            return fig
+        return self.plot()
+
     fn _get_status(self) raises -> String:
         var max_dev = self._max_gc_deviation()
         if max_dev > GC_SEQUENCE_ERROR:
@@ -119,7 +154,7 @@ struct CGContent(Analyser, Copyable, Movable):
     fn make_html(
         self,
     ) raises -> result_panel:
-        fig = self.plot()
+        fig = self.data_plot()
         var encoded_fig1 = encode_img_b64(fig)
         var result_1 = result_panel(
             "cg_content",
