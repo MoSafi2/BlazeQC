@@ -5,21 +5,20 @@ from blazeqc.helpers import (
     base2int,
     get_exp_interval,
     get_linear_interval,
-    grow_matrix,
     grow_tensor,
     make_linear_base_groups,
     make_ungrouped_groups,
     sum_tensor,
     _seq_to_hash,
 )
-from testing import assert_equal, assert_true, TestSuite
+from testing import assert_equal, assert_true, assert_false, TestSuite
 
 
-# ----- 1. Matrix2D -----
+# ----- 1. Matrix2D[DType.int64] -----
 
 
 def test_matrix2d_shape_and_num_elements():
-    var m = Matrix2D(2, 3)
+    var m = Matrix2D[DType.int64](2, 3)
     var sh = m.shape()
     assert_equal(sh[0], 2)
     assert_equal(sh[1], 3)
@@ -27,14 +26,14 @@ def test_matrix2d_shape_and_num_elements():
 
 
 def test_matrix2d_init_zeroed():
-    var m = Matrix2D(2, 3)
+    var m = Matrix2D[DType.int64](2, 3)
     assert_equal(m.get(0, 0), 0)
     assert_equal(m.get(1, 2), 0)
     assert_equal(m.get(0, 1), 0)
 
 
 def test_matrix2d_get_set():
-    var m = Matrix2D(2, 3)
+    var m = Matrix2D[DType.int64](2, 3)
     m.set(0, 0, 10)
     m.set(1, 2, -5)
     m.set(0, 1, 7)
@@ -44,7 +43,7 @@ def test_matrix2d_get_set():
 
 
 def test_matrix2d_add():
-    var m = Matrix2D(2, 2)
+    var m = Matrix2D[DType.int64](2, 2)
     m.set(0, 0, 1)
     m.add(0, 0, 2)
     m.add(1, 1, 5)
@@ -53,12 +52,111 @@ def test_matrix2d_add():
 
 
 def test_matrix2d_1x1():
-    var m = Matrix2D(1, 1)
+    var m = Matrix2D[DType.int64](1, 1)
     assert_equal(m.get(0, 0), 0)
     m.set(0, 0, 99)
     assert_equal(m.get(0, 0), 99)
     m.add(0, 0, 1)
     assert_equal(m.get(0, 0), 100)
+
+
+# ----- 1b. Matrix2D new methods -----
+
+
+def test_matrix2d_float64_basic():
+    var m = Matrix2D[DType.float64](2, 2)
+    assert_equal(m.get(0, 0), Float64(0.0))
+    m.set(0, 0, Float64(1.5))
+    m.set(1, 1, Float64(-2.5))
+    assert_equal(m.get(0, 0), Float64(1.5))
+    assert_equal(m.get(1, 1), Float64(-2.5))
+    assert_equal(m.get(0, 1), Float64(0.0))
+
+
+def test_matrix2d_fill():
+    var m = Matrix2D[DType.int64](2, 3)
+    m.fill(7)
+    for i in range(2):
+        for j in range(3):
+            assert_equal(m.get(i, j), 7)
+
+
+def test_matrix2d_zero():
+    var m = Matrix2D[DType.int64](2, 2)
+    m.fill(5)
+    m.zero()
+    assert_equal(m.get(0, 0), 0)
+    assert_equal(m.get(1, 1), 0)
+
+
+def test_matrix2d_row_sum():
+    var m = Matrix2D[DType.int64](2, 3)
+    m.set(0, 0, 1)
+    m.set(0, 1, 2)
+    m.set(0, 2, 3)
+    m.set(1, 0, 10)
+    assert_equal(m.row_sum(0), 6)
+    assert_equal(m.row_sum(1), 10)
+
+
+def test_matrix2d_col_sum():
+    var m = Matrix2D[DType.int64](3, 2)
+    m.set(0, 0, 1)
+    m.set(1, 0, 2)
+    m.set(2, 0, 3)
+    m.set(0, 1, 10)
+    assert_equal(m.col_sum(0), 6)
+    assert_equal(m.col_sum(1), 10)
+
+
+def test_matrix2d_resize_grow():
+    var m = Matrix2D[DType.int64](2, 2)
+    m.set(0, 0, 1)
+    m.set(0, 1, 2)
+    m.set(1, 0, 3)
+    m.set(1, 1, 4)
+    m.resize(3, 3)
+    assert_equal(m.shape()[0], 3)
+    assert_equal(m.shape()[1], 3)
+    assert_equal(m.get(0, 0), 1)
+    assert_equal(m.get(0, 1), 2)
+    assert_equal(m.get(1, 0), 3)
+    assert_equal(m.get(1, 1), 4)
+    assert_equal(m.get(0, 2), 0)
+    assert_equal(m.get(2, 2), 0)
+
+
+def test_matrix2d_resize_same():
+    var m = Matrix2D[DType.int64](2, 2)
+    m.set(0, 0, 5)
+    m.set(1, 1, 6)
+    m.resize(2, 2)
+    assert_equal(m.get(0, 0), 5)
+    assert_equal(m.get(1, 1), 6)
+
+
+def test_matrix2d_eq_true():
+    var a = Matrix2D[DType.int64](2, 2)
+    var b = Matrix2D[DType.int64](2, 2)
+    a.set(0, 1, 42)
+    b.set(0, 1, 42)
+    assert_true(a == b)
+
+
+def test_matrix2d_eq_false():
+    var a = Matrix2D[DType.int64](2, 2)
+    var b = Matrix2D[DType.int64](2, 2)
+    a.set(0, 0, 1)
+    assert_false(a == b)
+
+
+def test_matrix2d_copy_independent():
+    var a = Matrix2D[DType.int64](2, 2)
+    a.set(0, 0, 10)
+    var b = a
+    b.set(0, 0, 99)
+    assert_equal(a.get(0, 0), 10)
+    assert_equal(b.get(0, 0), 99)
 
 
 # ----- 2. get_exp_interval -----

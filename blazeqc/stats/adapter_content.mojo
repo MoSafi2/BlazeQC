@@ -5,7 +5,6 @@ from python import Python, PythonObject
 from blazeqc.stats.analyser import Analyser
 from blazeqc.helpers import (
     Matrix2D,
-    grow_matrix,
     matrix_to_numpy,
     encode_img_b64,
 )
@@ -19,19 +18,19 @@ from blazeseq import FastqRecord, RefRecord
 @fieldwise_init
 struct AdapterContent[bits: Int = 3](Analyser):
     var kmer_len: Int
-    var hash_counts: Matrix2D
+    var hash_counts: Matrix2D[DType.int64]
     var hash_list: List[UInt64]
     var max_length: Int
 
     fn __init__(out self, var hashes: List[UInt64], kmer_len: Int = 0):
         self.kmer_len = min(kmer_len, 64 // Self.bits)
         self.hash_list = hashes^
-        self.hash_counts = Matrix2D(len(self.hash_list), 1)
+        self.hash_counts = Matrix2D[DType.int64](len(self.hash_list), 1)
         self.max_length = 0
 
     fn __copyinit__(out self, existing: Self):
         self.kmer_len = existing.kmer_len
-        self.hash_counts = Matrix2D(
+        self.hash_counts = Matrix2D[DType.int64](
             existing.hash_counts.rows, existing.hash_counts.cols
         )
         for i in range(existing.hash_counts.rows):
@@ -60,9 +59,7 @@ struct AdapterContent[bits: Int = 3](Analyser):
         var rec_len = len(record)
         if rec_len > self.max_length:
             self.max_length = rec_len
-            self.hash_counts = grow_matrix(
-                self.hash_counts, len(self.hash_list), self.max_length
-            )
+            self.hash_counts.resize(len(self.hash_list), self.max_length)
 
         if len(self.hash_list) > 0:
             self._check_hashes(hash, 1)
@@ -87,9 +84,7 @@ struct AdapterContent[bits: Int = 3](Analyser):
         var rec_len = len(record)
         if rec_len > self.max_length:
             self.max_length = rec_len
-            self.hash_counts = grow_matrix(
-                self.hash_counts, len(self.hash_list), self.max_length
-            )
+            self.hash_counts.resize(len(self.hash_list), self.max_length)
 
         # Check initial Kmer
         if len(self.hash_list) > 0:

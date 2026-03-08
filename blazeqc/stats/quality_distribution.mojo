@@ -6,7 +6,6 @@ from blazeqc.stats.analyser import Analyser
 from blazeqc.helpers import (
     Matrix2D,
     matrix_to_numpy,
-    grow_matrix,
     tensor_to_numpy_1d,
     make_linear_base_groups,
     bin_array,
@@ -23,14 +22,14 @@ from blazeqc.html_maker import result_panel
 
 
 struct QualityDistribution(Analyser, Copyable, Movable):
-    var qu_dist: Matrix2D
+    var qu_dist: Matrix2D[DType.int64]
     var qu_dist_seq: List[Int64]
     var max_length: Int
     var max_qu: UInt8
     var min_qu: UInt8
 
     fn __init__(out self):
-        self.qu_dist = Matrix2D(1, 128)
+        self.qu_dist = Matrix2D[DType.int64](1, 128)
         self.qu_dist_seq = List[Int64](capacity=128)
         for _ in range(128):
             self.qu_dist_seq.append(0)
@@ -41,8 +40,7 @@ struct QualityDistribution(Analyser, Copyable, Movable):
     fn tally_read(mut self, record: FastqRecord):
         if len(record) > self.max_length:
             self.max_length = len(record)
-            var new_qu_dist = grow_matrix(self.qu_dist, self.max_length, 128)
-            swap(self.qu_dist, new_qu_dist)
+            self.qu_dist.resize(self.max_length, 128)
 
         for i in range(len(record)):
             var base_qu = record.quality[i]
@@ -63,8 +61,7 @@ struct QualityDistribution(Analyser, Copyable, Movable):
     fn tally_read(mut self, record: RefRecord):
         if len(record) > self.max_length:
             self.max_length = len(record)
-            var new_qu_dist = grow_matrix(self.qu_dist, self.max_length, 128)
-            swap(self.qu_dist, new_qu_dist)
+            self.qu_dist.resize(self.max_length, 128)
 
         for i in range(len(record)):
             var base_qu = record.quality[i]

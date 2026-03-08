@@ -55,7 +55,7 @@ def test_list_float64_to_numpy():
 
 
 def test_matrix_to_numpy():
-    var m = Matrix2D(2, 2)
+    var m = Matrix2D[DType.int64](2, 2)
     m.set(0, 0, 1)
     m.set(0, 1, 2)
     m.set(1, 0, 3)

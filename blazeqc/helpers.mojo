@@ -1,24 +1,42 @@
 """BlazeQC helpers: matrix/list utilities, base grouping, quality schema, and Python/NumPy interop."""
 
+from memory import UnsafePointer, memset_zero, memcpy, alloc
 from python import PythonObject, Python
 from utils import Index, IndexList
 
 comptime py_lib: String = "./.pixi/envs/default/lib/python3.12/site-packages/"
 
-# 2D matrix backed by a flat List[Int64] (row-major). Preferred 2D replacement for
-# Tensor in this codebase; use List[Int64] for 1D data.
-@fieldwise_init
-struct Matrix2D(Copyable & Movable):
-    var data: List[Int64]
+# 2D matrix backed by a flat heap buffer (row-major).
+# Generic over DType — use DType.int64 for count accumulators and
+# DType.float64 for floating-point matrices (e.g. tile quality deviations).
+struct Matrix2D[dtype: DType](Copyable, Movable):
+    var data: UnsafePointer[Scalar[Self.dtype], MutExternalOrigin]
     var rows: Int
     var cols: Int
 
     fn __init__(out self, rows: Int, cols: Int):
         self.rows = rows
         self.cols = cols
-        self.data = List[Int64](capacity=rows * cols)
-        for _ in range(rows * cols):
-            self.data.append(0)
+        self.data = alloc[Scalar[Self.dtype]](rows * cols)
+        memset_zero(self.data, rows * cols)
+
+    fn __copyinit__(out self, other: Self):
+        self.rows = other.rows
+        self.cols = other.cols
+        var n = other.rows * other.cols
+        self.data = alloc[Scalar[Self.dtype]](n)
+        memcpy(dest=self.data, src=other.data, count=n)
+
+    fn __moveinit__(out self, deinit other: Self):
+        self.rows = other.rows
+        self.cols = other.cols
+        self.data = other.data
+
+    fn __del__(deinit self):
+        if self.data:
+            self.data.free()
+
+    # --- shape / indexing ---
 
     fn shape(self) -> Tuple[Int, Int]:
         return (self.rows, self.cols)
@@ -26,23 +44,74 @@ struct Matrix2D(Copyable & Movable):
     fn num_elements(self) -> Int:
         return self.rows * self.cols
 
+    @always_inline
     fn _idx(self, i: Int, j: Int) -> Int:
         return i * self.cols + j
 
-    fn get(self, i: Int, j: Int) -> Int64:
+    @always_inline
+    fn get(self, i: Int, j: Int) -> Scalar[Self.dtype]:
         return self.data[self._idx(i, j)]
 
-    fn set(mut self, i: Int, j: Int, v: Int64):
+    @always_inline
+    fn set(mut self, i: Int, j: Int, v: Scalar[Self.dtype]):
         self.data[self._idx(i, j)] = v
 
-    fn add(mut self, i: Int, j: Int, delta: Int64):
+    @always_inline
+    fn add(mut self, i: Int, j: Int, delta: Scalar[Self.dtype]):
         self.data[self._idx(i, j)] += delta
 
-    fn __getitem__(self, index: IndexList[2]) -> Int64:
+    fn __getitem__(self, index: IndexList[2]) -> Scalar[Self.dtype]:
         return self.get(index[0], index[1])
 
-    fn __setitem__(mut self, index: IndexList[2], value: Int64):
+    fn __setitem__(mut self, index: IndexList[2], value: Scalar[Self.dtype]):
         self.set(index[0], index[1], value)
+
+    fn __eq__(self, other: Self) -> Bool:
+        if self.rows != other.rows or self.cols != other.cols:
+            return False
+        for k in range(self.rows * self.cols):
+            if self.data[k] != other.data[k]:
+                return False
+        return True
+
+    # --- bulk operations ---
+
+    fn fill(mut self, v: Scalar[Self.dtype]):
+        """Set every element to v."""
+        for k in range(self.rows * self.cols):
+            self.data[k] = v
+
+    fn zero(mut self):
+        """Zero all elements."""
+        memset_zero(self.data, self.rows * self.cols)
+
+    fn row_sum(self, i: Int) -> Scalar[Self.dtype]:
+        """Return the sum of row i."""
+        var acc: Scalar[Self.dtype] = 0
+        for j in range(self.cols):
+            acc += self.data[self._idx(i, j)]
+        return acc
+
+    fn col_sum(self, j: Int) -> Scalar[Self.dtype]:
+        """Return the sum of column j."""
+        var acc: Scalar[Self.dtype] = 0
+        for i in range(self.rows):
+            acc += self.data[self._idx(i, j)]
+        return acc
+
+    fn resize(mut self, new_rows: Int, new_cols: Int):
+        """Grow or shrink in-place, preserving the top-left overlap; new cells are zero."""
+        var new_data = alloc[Scalar[Self.dtype]](new_rows * new_cols)
+        memset_zero(new_data, new_rows * new_cols)
+        var copy_rows = min(self.rows, new_rows)
+        var copy_cols = min(self.cols, new_cols)
+        for i in range(copy_rows):
+            for j in range(copy_cols):
+                new_data[i * new_cols + j] = self.data[i * self.cols + j]
+        self.data.free()
+        self.data = new_data
+        self.rows = new_rows
+        self.cols = new_cols
 
 fn encode_img_b64(fig: PythonObject) raises -> String:
     """Encode a matplotlib figure as a base64 PNG string."""
@@ -215,7 +284,7 @@ fn list_float64_to_numpy(ref data: List[Float64]) raises -> PythonObject:
     return np.array(py_list)
 
 
-fn matrix_to_numpy(m: Matrix2D) raises -> PythonObject:
+fn matrix_to_numpy[dtype: DType](m: Matrix2D[dtype]) raises -> PythonObject:
     """Convert a Matrix2D to a NumPy 2D array."""
     var np = Python.import_module("numpy")
     var py_rows = Python.list()
@@ -227,16 +296,16 @@ fn matrix_to_numpy(m: Matrix2D) raises -> PythonObject:
     return np.array(py_rows)
 
 
-fn from_numpy(arr: PythonObject) raises -> Matrix2D:
-    """Create a Matrix2D from a NumPy 2D array (int64 or coercible to integer)."""
+fn from_numpy[dtype: DType = DType.int64](arr: PythonObject) raises -> Matrix2D[dtype]:
+    """Create a Matrix2D[dtype] from a NumPy 2D array."""
     if arr.ndim != 2:
         raise Error("from_numpy expects a 2D array")
     var rows = Int(py=arr.shape[0])
     var cols = Int(py=arr.shape[1])
-    var mat = Matrix2D(rows, cols)
+    var mat = Matrix2D[dtype](rows, cols)
     for i in range(rows):
         for j in range(cols):
-            mat.set(i, j, Int64(py=arr.item(i, j)))
+            mat.set(i, j, Scalar[dtype](py=arr.item(i, j)))
     return mat^
 
 
@@ -250,15 +319,6 @@ fn grow_tensor(old_list: List[Int64], new_size: Int) -> List[Int64]:
         else:
             new_list.append(0)
     return new_list^
-
-
-fn grow_matrix(old_mat: Matrix2D, new_rows: Int, new_cols: Int) -> Matrix2D:
-    """Return a new Matrix2D of shape (new_rows, new_cols) with old data copied; rest zero."""
-    var new_mat = Matrix2D(new_rows, new_cols)
-    for i in range(old_mat.rows):
-        for j in range(old_mat.cols):
-            new_mat.set(i, j, old_mat.get(i, j))
-    return new_mat^
 
 
 fn sum_tensor(list: List[Int64]) -> Int64:

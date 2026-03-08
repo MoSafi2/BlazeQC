@@ -6,7 +6,6 @@ from blazeqc.stats.analyser import Analyser
 from blazeqc.helpers import (
     Matrix2D,
     matrix_to_numpy,
-    grow_matrix,
     make_linear_base_groups,
     bin_array,
     encode_img_b64,
@@ -16,13 +15,13 @@ from blazeqc.html_maker import result_panel
 
 @fieldwise_init
 struct BasepairDistribution(Analyser):
-    var bp_dist: Matrix2D
+    var bp_dist: Matrix2D[DType.int64]
     var max_length: Int
     var min_length: Int
     comptime WIDTH = 5
 
     fn __init__(out self):
-        self.bp_dist = Matrix2D(1, self.WIDTH)
+        self.bp_dist = Matrix2D[DType.int64](1, self.WIDTH)
         self.max_length = 0
         self.min_length = Int.MAX
 
@@ -30,8 +29,7 @@ struct BasepairDistribution(Analyser):
         var rec_len = len(record)
         if rec_len > self.max_length:
             self.max_length = rec_len
-            var new_mat = grow_matrix(self.bp_dist, self.max_length, self.WIDTH)
-            swap(self.bp_dist, new_mat)
+            self.bp_dist.resize(self.max_length, self.WIDTH)
 
         if rec_len < self.min_length:
             self.min_length = rec_len
@@ -44,8 +42,7 @@ struct BasepairDistribution(Analyser):
         var rec_len = len(record)
         if rec_len > self.max_length:
             self.max_length = rec_len
-            var new_mat = grow_matrix(self.bp_dist, self.max_length, self.WIDTH)
-            swap(self.bp_dist, new_mat)
+            self.bp_dist.resize(self.max_length, self.WIDTH)
 
         if rec_len < self.min_length:
             self.min_length = rec_len
