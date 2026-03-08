@@ -52,27 +52,18 @@ struct BasepairDistribution(Analyser):
             var base_val = Int((record.sequence[i] & 0b11111) % self.WIDTH)
             self.bp_dist.add(i, base_val, 1)
 
-    fn plot(
-        self, total_reads: Int64
-    ) raises -> Tuple[PythonObject, PythonObject]:
+    fn _plot_sequence_content(
+        self, arr1: PythonObject, py_bins: PythonObject, bins: List[Int]
+    ) raises -> PythonObject:
+        """Plot per-base sequence content (C, G, T, A) across all bases."""
         var plt = Python.import_module("matplotlib.pyplot")
         var mtp = Python.import_module("matplotlib")
-        var np = Python.import_module("numpy")
-        var arr = matrix_to_numpy(self.bp_dist)
-        var bins = make_linear_base_groups(self.max_length)
-        arr, py_bins = bin_array(arr, bins, func="sum")
-        arr = (np.divide(arr.T, arr.sum(axis=1)).T) * 100
-
-        var arr1 = arr[:, 0:4]  # C,G,T,A pairs
-        var arr2 = arr[:, 4:5]  # N content
         var x = plt.subplots()
         var fig = x[0]
         var ax = x[1]
-
         var bins_range = Python.list()
         for i in range(len(bins)):
             bins_range.append(i)
-
         ax.set_xticks(bins_range)
         ax.set_xticklabels(py_bins, rotation=45)
         ax.plot(arr1)
@@ -88,16 +79,21 @@ struct BasepairDistribution(Analyser):
         ax.legend(legend_labels)
         ax.set_xlabel("Position in read (bp)")
         ax.set_title("Sequence content across all bases")
+        return fig
 
+    fn _plot_n_content(
+        self, arr2: PythonObject, py_bins: PythonObject, bins: List[Int]
+    ) raises -> PythonObject:
+        """Plot per-base N content across all bases."""
+        var plt = Python.import_module("matplotlib.pyplot")
+        var mtp = Python.import_module("matplotlib")
         var y = plt.subplots()
         var fig2 = y[0]
         var ax2 = y[1]
         ax2.plot(arr2)
-
         var bins_range_2 = Python.list()
         for i in range(len(bins)):
             bins_range_2.append(i)
-
         ax2.set_xticks(bins_range_2)
         ax2.set_xticklabels(py_bins, rotation=45)
         ax2.xaxis.set_major_locator(
@@ -109,9 +105,23 @@ struct BasepairDistribution(Analyser):
         ax2.legend(legend_labels_n)
         ax2.set_xlabel("Position in read (bp)")
         ax2.set_title("N content across all bases")
+        return fig2
 
+    fn plot(
+        self, total_reads: Int64
+    ) raises -> Tuple[PythonObject, PythonObject]:
+        var np = Python.import_module("numpy")
+        var arr = matrix_to_numpy(self.bp_dist)
+        var bins = make_linear_base_groups(self.max_length)
+        arr, py_bins = bin_array(arr, bins, func="sum")
+        arr = (np.divide(arr.T, arr.sum(axis=1)).T) * 100
+        var arr1 = arr[:, 0:4]  # C,G,T,A pairs
+        var arr2 = arr[:, 4:5]  # N content
         # Return (N figure, base figure) so make_html receives fig1=N, fig2=base
-        return fig2, fig
+        return (
+            self._plot_n_content(arr2, py_bins, bins),
+            self._plot_sequence_content(arr1, py_bins, bins),
+        )
 
     fn _get_status_n_content(self) -> String:
         """Max N% at any position (FastQC n_content)."""
