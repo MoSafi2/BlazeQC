@@ -30,11 +30,11 @@ struct CGContent(Analyser, Copyable, Movable):
             return
 
         var cg_num = 0
-
+        var seq_span = record.sequence()
         for index in range(0, len(record)):
             if (
-                record.sequence[index] & 0b111 == 3
-                or record.sequence[index] & 0b111 == 7
+                seq_span[index] & 0b111 == 3
+                or seq_span[index] & 0b111 == 7
             ):
                 cg_num += 1
 
@@ -48,11 +48,11 @@ struct CGContent(Analyser, Copyable, Movable):
             return
 
         var cg_num = 0
-
+        var seq_span = record.sequence()
         for index in range(0, len(record)):
             if (
-                record.sequence[index] & 0b111 == 3
-                or record.sequence[index] & 0b111 == 7
+                seq_span[index] & 0b111 == 3
+                or seq_span[index] & 0b111 == 7
             ):
                 cg_num += 1
 

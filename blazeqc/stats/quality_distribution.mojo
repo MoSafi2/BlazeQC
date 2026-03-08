@@ -74,8 +74,9 @@ struct QualityDistribution(Analyser, Copyable, Movable):
             self.max_length = len(record)
             self.qu_dist.resize(self.max_length, 128)
 
+        var qu_span = record.quality()
         for i in range(len(record)):
-            var base_qu = record.quality[i]
+            var base_qu = qu_span[i]
             self.qu_dist.add(i, Int(base_qu), 1)
             if base_qu > self.max_qu:
                 self.max_qu = base_qu
@@ -84,7 +85,7 @@ struct QualityDistribution(Analyser, Copyable, Movable):
 
         var qu_sum: Int = 0
         for i in range(len(record)):
-            qu_sum += Int(record.quality[i])
+            qu_sum += Int(qu_span[i])
         var average = Int(qu_sum / len(record))
         while len(self.qu_dist_seq) <= average:
             self.qu_dist_seq.append(0)
@@ -95,8 +96,9 @@ struct QualityDistribution(Analyser, Copyable, Movable):
             self.max_length = len(record)
             self.qu_dist.resize(self.max_length, 128)
 
+        var qu_span = record.quality()
         for i in range(len(record)):
-            var base_qu = record.quality[i]
+            var base_qu = qu_span[i]
             self.qu_dist.add(i, Int(base_qu), 1)
             if base_qu > self.max_qu:
                 self.max_qu = base_qu
@@ -105,7 +107,7 @@ struct QualityDistribution(Analyser, Copyable, Movable):
 
         var qu_sum: Int = 0
         for i in range(len(record)):
-            qu_sum += Int(record.quality[i])
+            qu_sum += Int(qu_span[i])
         var average = Int(qu_sum / len(record))
         while len(self.qu_dist_seq) <= average:
             self.qu_dist_seq.append(0)

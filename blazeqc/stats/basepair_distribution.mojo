@@ -45,8 +45,9 @@ struct BasepairDistribution(Analyser):
         if rec_len < self.min_length:
             self.min_length = rec_len
 
+        var seq_span = record.sequence()
         for i in range(rec_len):
-            var base_val = Int((record.sequence[i] & 0b11111) % self.WIDTH)
+            var base_val = Int((seq_span[i] & 0b11111) % self.WIDTH)
             self.bp_dist.add(i, base_val, 1)
 
     fn tally_read(mut self, record: RefRecord):
@@ -58,8 +59,9 @@ struct BasepairDistribution(Analyser):
         if rec_len < self.min_length:
             self.min_length = rec_len
 
+        var seq_span = record.sequence().as_bytes()
         for i in range(rec_len):
-            var base_val = Int((record.sequence[i] & 0b11111) % self.WIDTH)
+            var base_val = Int((seq_span[i] & 0b11111) % self.WIDTH)
             self.bp_dist.add(i, base_val, 1)
 
     fn _plot_sequence_content(

@@ -91,8 +91,9 @@ struct PerTileQuality(Analyser, Copyable, Movable):
                     deref_value.quality, len(record)
                 )
 
+            var qu_span = record.quality()
             for i in range(len(record)):
-                deref_value.quality[i] += Int(record.quality[i])
+                deref_value.quality[i] += Int(qu_span[i])
 
             self.map._entries[pos] = DictEntry[
                 Int, TileQualityEntry, default_hasher
@@ -133,8 +134,9 @@ struct PerTileQuality(Analyser, Copyable, Movable):
                     deref_value.quality, len(record)
                 )
 
+            var qu_span = record.quality().as_bytes()
             for i in range(len(record)):
-                deref_value.quality[i] += Int(record.quality[i])
+                deref_value.quality[i] += Int(qu_span[i])
 
             self.map._entries[pos] = DictEntry[
                 Int, TileQualityEntry, default_hasher
@@ -361,9 +363,10 @@ struct PerTileQuality(Analyser, Copyable, Movable):
     @always_inline
     fn _find_tile_info(self, record: FastqRecord) -> Int:
         comptime sep: UInt8 = ord(":")
+        var id_bytes = record.id()
         count = 0
-        for i in range(len(record.id)):
-            if record.id[i] == sep:
+        for i in range(len(id_bytes)):
+            if id_bytes[i] == sep:
                 count += 1
         var split_position: Int
         if count >= 6:
@@ -380,10 +383,10 @@ struct PerTileQuality(Analyser, Copyable, Movable):
         var index_1 = 0
         var index_2 = 0
         var count = 0
-        var id_slice = record.id_slice()
+        var id_bytes = record.id()
         # TODO: Add Error Handling
-        for i in range(len(record.id)):
-            if record.id[i] == sep:
+        for i in range(len(id_bytes)):
+            if id_bytes[i] == sep:
                 count += 1
                 if count == pos:
                     index_1 = i + 1
@@ -391,7 +394,7 @@ struct PerTileQuality(Analyser, Copyable, Movable):
                     index_2 = i
                     break
 
-        var s = String(id_slice)
+        var s = String(unsafe_from_utf8=record.id())
 
         try:
             return atol(s[index_1:index_2])
@@ -401,9 +404,10 @@ struct PerTileQuality(Analyser, Copyable, Movable):
     @always_inline
     fn _find_tile_info(self, record: RefRecord) -> Int:
         comptime sep: UInt8 = ord(":")
+        var id_bytes = record.id().as_bytes()
         var count = 0
-        for i in range(len(record.id)):
-            if record.id[i] == sep:
+        for i in range(len(id_bytes)):
+            if id_bytes[i] == sep:
                 count += 1
         var split_position: Int
         if count >= 6:
@@ -420,9 +424,9 @@ struct PerTileQuality(Analyser, Copyable, Movable):
         var index_1 = 0
         var index_2 = 0
         var count = 0
-        var id_slice = record.id_slice()
-        for i in range(len(record.id)):
-            if record.id[i] == sep:
+        var id_bytes = record.id().as_bytes()
+        for i in range(len(id_bytes)):
+            if id_bytes[i] == sep:
                 count += 1
                 if count == pos:
                     index_1 = i + 1
@@ -430,7 +434,7 @@ struct PerTileQuality(Analyser, Copyable, Movable):
                     index_2 = i
                     break
 
-        var s = String(id_slice)
+        var s = String(unsafe_from_utf8=record.id().as_bytes())
 
         try:
             return atol(s[index_1:index_2])

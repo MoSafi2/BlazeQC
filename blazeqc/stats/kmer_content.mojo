@@ -37,7 +37,7 @@ struct KmerContent[KMERSIZE: Int](Copyable, Movable):
 
             self.kmers = new_kmers^
 
-        var s = record.sequence.as_span()
+        var s = record.sequence()
         # INFO: As per FastQC: limit the Kmers to the first 500 BP for long reads
         for i in range(min(len(record), 500) - Self.KMERSIZE):
             var kmer = s[i : i + Self.KMERSIZE]
@@ -65,7 +65,7 @@ struct KmerContent[KMERSIZE: Int](Copyable, Movable):
 
             self.kmers = new_kmers^
 
-        var s = record.sequence
+        var s = record.sequence().as_bytes()
         for i in range(min(len(record), 500) - Self.KMERSIZE):
             var kmer = s[i : i + Self.KMERSIZE]
             var contains_n = False
@@ -89,7 +89,7 @@ struct KmerContent[KMERSIZE: Int](Copyable, Movable):
     # TODO: Figure out how the enrichment calculation is carried out.
     # Check: https://github.com/smithlabcode/falco/blob/f4f0e6ca35e262cbeffc81fdfc620b3413ecfe2c/src/Module.cpp#L2068
     fn plot(self) raises -> PythonObject:
-        var agg = Matrix2D(pow(4, Self.KMERSIZE), self.max_length)
+        var agg = Matrix2D[DType.int64](pow(4, Self.KMERSIZE), self.max_length)
         for i in range(len(self.kmers)):
             for j in range(len(self.kmers[i])):
                 agg[Index(i, j)] = self.kmers[i][j]

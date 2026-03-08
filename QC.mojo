@@ -36,7 +36,7 @@ fn main() raises:
         for record in parser.ref_records():
             n += 1
             stats.tally(record)
-            var pos = parser.get_file_position()
+            var pos = parser.buffer.source._file.tell()
             if pos >= next_threshold:
                 if total_size > 0:
                     print("\rParsing & tallying: ", Int(100 * pos // total_size), "% (", n, " reads)", end="", flush=True)

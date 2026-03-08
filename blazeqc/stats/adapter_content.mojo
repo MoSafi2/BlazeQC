@@ -76,9 +76,10 @@ struct AdapterContent[bits: Int = 3](Analyser):
         if len(self.hash_list) > 0:
             self._check_hashes(hash, 1)
 
+        var seq_span = record.sequence().as_bytes()
         for i in range(end, rec_len):
             hash = hash & neg_mask
-            var rem = record.sequence[i] & bit_shift
+            var rem = seq_span[i] & bit_shift
             hash = (hash << Self.bits) + Int(rem)
             if len(self.hash_list) > 0:
                 self._check_hashes(hash, i + 1)
@@ -102,12 +103,13 @@ struct AdapterContent[bits: Int = 3](Analyser):
         if len(self.hash_list) > 0:
             self._check_hashes(hash, 1)
 
+        var seq_span = record.sequence()
         for i in range(end, rec_len):
             # Remove the most signifcant xx bits
             hash = hash & neg_mask
 
             # Mask for the least sig. three bits, add to hash
-            var rem = record.sequence.as_span()[i] & bit_shift
+            var rem = seq_span[i] & bit_shift
             hash = (hash << Self.bits) + Int(rem)
             if len(self.hash_list) > 0:
                 self._check_hashes(hash, i + 1)

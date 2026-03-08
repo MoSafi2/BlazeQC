@@ -40,7 +40,7 @@ struct DupReads(Analyser, Copyable, Movable):
         var read_len = min(len(record), 50)
         var s: String
         try:
-            s = String(record.sequence_slice()[0:read_len])
+            s = String(unsafe_from_utf8=record.sequence()[0:read_len])
         except:
             s = ""
         if s in self.unique_dict:
@@ -65,7 +65,7 @@ struct DupReads(Analyser, Copyable, Movable):
         var read_len = min(len(record), 50)
         var s: String
         try:
-            s = String(record.sequence_slice()[0:read_len])
+            s = String(unsafe_from_utf8=record.sequence().as_bytes()[0:read_len])
         except:
             s = ""
         if s in self.unique_dict:
