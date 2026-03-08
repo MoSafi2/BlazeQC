@@ -48,7 +48,7 @@ struct CGContent(Analyser, Copyable, Movable):
             return
 
         var cg_num = 0
-        var seq_span = record.sequence()
+        var seq_span = record.sequence().as_bytes()
         for index in range(0, len(record)):
             if (
                 seq_span[index] & 0b111 == 3

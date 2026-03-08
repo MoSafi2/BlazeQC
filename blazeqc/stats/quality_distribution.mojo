@@ -96,7 +96,7 @@ struct QualityDistribution(Analyser, Copyable, Movable):
             self.max_length = len(record)
             self.qu_dist.resize(self.max_length, 128)
 
-        var qu_span = record.quality()
+        var qu_span = record.quality().as_bytes()
         for i in range(len(record)):
             var base_qu = qu_span[i]
             self.qu_dist.add(i, Int(base_qu), 1)
