@@ -1,6 +1,7 @@
 """Unit tests for blazeqc.stats.tile_quality (pure Mojo)."""
 
 from blazeseq import FastqRecord
+from blazeqc.helpers import Matrix2D
 from blazeqc.stats.tile_quality import PerTileQuality, TileQualityEntry
 from testing import assert_equal, assert_true, TestSuite
 
@@ -148,6 +149,59 @@ def test_per_tile_tally_n_increments_on_no_tile():
     var rec = FastqRecord("readname", "ACGT", "IIII")
     ptq.tally_read(rec)
     assert_equal(ptq.n, 1)
+
+
+# ----- 6. FastQC alignment: normalization and plot -----
+
+
+def test_tile_quality_normalization_column_sums_zero():
+    """After _subtract_group_averages, each column (group) sums to zero across tiles (FastQC normalization)."""
+    var ptq = PerTileQuality()
+    var means = Matrix2D[DType.float64](2, 3)
+    means.set(0, 0, 10.0)
+    means.set(0, 1, 20.0)
+    means.set(0, 2, 30.0)
+    means.set(1, 0, 14.0)
+    means.set(1, 1, 22.0)
+    means.set(1, 2, 26.0)
+    _ = ptq._subtract_group_averages(means, 2, 3)
+    assert_equal(means.col_sum(0), Float64(0.0))
+    assert_equal(means.col_sum(1), Float64(0.0))
+    assert_equal(means.col_sum(2), Float64(0.0))
+
+
+def test_tile_quality_plot_runs_and_sets_max_deviation():
+    """Plot runs on minimal tile data and sets max_deviation (sanity check for FastQC-aligned pipeline)."""
+    var ptq = PerTileQuality()
+    var rec1 = FastqRecord("SIM:1:FCX:1:15:6329:1045", "ACGT", "IIII")
+    var rec2 = FastqRecord("SIM:1:FCX:2:15:6329:1046", "ACGT", "IIII")
+    ptq.tally_read(rec1)
+    ptq.tally_read(rec2)
+    _ = ptq.plot()
+    assert_true(ptq.max_deviation >= 0.0)
+    assert_true(ptq.max_length > 0)
+
+
+# ----- 6. _get_status (pass/warn/fail) -----
+# Limits: TILE_WARN=5, TILE_ERROR=10
+
+
+def test_tile_quality_status_pass():
+    var ptq = PerTileQuality()
+    ptq.max_deviation = 2.0
+    assert_equal(ptq._get_status(), "pass")
+
+
+def test_tile_quality_status_warn():
+    var ptq = PerTileQuality()
+    ptq.max_deviation = 6.0
+    assert_equal(ptq._get_status(), "warn")
+
+
+def test_tile_quality_status_fail():
+    var ptq = PerTileQuality()
+    ptq.max_deviation = 12.0
+    assert_equal(ptq._get_status(), "fail")
 
 
 def main():

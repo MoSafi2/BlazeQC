@@ -11,6 +11,7 @@ from blazeqc.helpers import (
     encode_img_b64,
 )
 from blazeqc.html_maker import result_panel
+from blazeqc.limits import N_CONTENT_WARN, N_CONTENT_ERROR, SEQUENCE_WARN, SEQUENCE_ERROR
 
 
 @fieldwise_init
@@ -112,6 +113,53 @@ struct BasepairDistribution(Analyser):
         # Return (N figure, base figure) so make_html receives fig1=N, fig2=base
         return fig2, fig
 
+    fn _get_status_n_content(self) -> String:
+        """Max N% at any position (FastQC n_content)."""
+        var max_n_pct: Float64 = 0.0
+        for row in range(self.bp_dist.rows):
+            var total: Int64 = 0
+            for col in range(self.bp_dist.cols):
+                total += self.bp_dist.get(row, col)
+            if total == 0:
+                continue
+            var n_pct = (Float64(self.bp_dist.get(row, 4)) / Float64(total)) * 100.0
+            if n_pct > max_n_pct:
+                max_n_pct = n_pct
+        if max_n_pct > N_CONTENT_ERROR:
+            return "fail"
+        if max_n_pct > N_CONTENT_WARN:
+            return "warn"
+        return "pass"
+
+    fn _get_status_sequence_content(self) -> String:
+        """Max deviation A-T or C-G at any position (FastQC per-base sequence content)."""
+        var max_dev: Float64 = 0.0
+        for row in range(self.bp_dist.rows):
+            var total: Int64 = 0
+            for col in range(self.bp_dist.cols):
+                total += self.bp_dist.get(row, col)
+            if total == 0:
+                continue
+            var t = Float64(total)
+            var pct_a = (Float64(self.bp_dist.get(row, 3)) / t) * 100.0
+            var pct_t = (Float64(self.bp_dist.get(row, 2)) / t) * 100.0
+            var pct_c = (Float64(self.bp_dist.get(row, 0)) / t) * 100.0
+            var pct_g = (Float64(self.bp_dist.get(row, 1)) / t) * 100.0
+            var dev_at = pct_a - pct_t
+            if dev_at < 0:
+                dev_at = -dev_at
+            var dev_cg = pct_c - pct_g
+            if dev_cg < 0:
+                dev_cg = -dev_cg
+            var dev = dev_at if dev_at > dev_cg else dev_cg
+            if dev > max_dev:
+                max_dev = dev
+        if max_dev > SEQUENCE_ERROR:
+            return "fail"
+        if max_dev > SEQUENCE_WARN:
+            return "warn"
+        return "pass"
+
     @always_inline
     fn make_grade(self, grades: Dict[String, Int]):
         pass
@@ -125,13 +173,13 @@ struct BasepairDistribution(Analyser):
         # fig1 = N figure, fig2 = base figure (see plot() return order)
         var result_1 = result_panel(
             "n_percentage",
-            "pass",
+            self._get_status_n_content(),
             "N percentage",
             encoded_fig1,
         )
         var result_2 = result_panel(
             "base_pair_distribution",
-            "pass",
+            self._get_status_sequence_content(),
             "Base Distribution",
             encoded_fig2,
         )

@@ -138,5 +138,37 @@ def test_bp_dist_tally_accumulates_same_position():
     assert_equal(bd.bp_dist.get(0, 1), 2)   # col 1 (A), two counts
 
 
+# ----- _get_status_n_content, _get_status_sequence_content -----
+# N: N_CONTENT_WARN=5, N_CONTENT_ERROR=20. Sequence: SEQUENCE_WARN=10, SEQUENCE_ERROR=20.
+
+
+def test_bp_dist_status_n_pass():
+    var bd = BasepairDistribution()
+    for _ in range(24):
+        bd.tally_read(FastqRecord("r", "A", "I"))
+    bd.tally_read(FastqRecord("r", "N", "I"))
+    assert_equal(bd._get_status_n_content(), "pass")
+
+
+def test_bp_dist_status_n_fail():
+    var bd = BasepairDistribution()
+    for _ in range(3):
+        bd.tally_read(FastqRecord("r", "A", "I"))
+    for _ in range(2):
+        bd.tally_read(FastqRecord("r", "N", "I"))
+    assert_equal(bd._get_status_n_content(), "fail")
+
+
+def test_bp_dist_status_sequence_fail():
+    var bd = BasepairDistribution()
+    for _ in range(6):
+        bd.tally_read(FastqRecord("r", "A", "I"))
+    for _ in range(2):
+        bd.tally_read(FastqRecord("r", "T", "I"))
+    for _ in range(2):
+        bd.tally_read(FastqRecord("r", "G", "I"))
+    assert_equal(bd._get_status_sequence_content(), "fail")
+
+
 def main():
     TestSuite.discover_tests[__functions_in_module()]().run()

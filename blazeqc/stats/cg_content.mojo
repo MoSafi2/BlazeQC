@@ -5,6 +5,7 @@ from blazeseq import FastqRecord, RefRecord
 from blazeqc.stats.analyser import Analyser
 from blazeqc.helpers import tensor_to_numpy_1d, encode_img_b64
 from blazeqc.html_maker import result_panel
+from blazeqc.limits import GC_SEQUENCE_WARN, GC_SEQUENCE_ERROR
 
 
 # Done!
@@ -72,6 +73,35 @@ struct CGContent(Analyser, Copyable, Movable):
         var theoritical_distribution = nd.pdf(x_categories) * total_counts
         return theoritical_distribution
 
+    fn _max_gc_deviation(self) raises -> Float64:
+        """Max absolute deviation (%) between observed and theoretical GC distribution."""
+        var theor = self.calculate_theoritical_distribution()
+        var np = Python.import_module("numpy")
+        var obs_arr = tensor_to_numpy_1d(self.cg_content)
+        var total_obs = Float64(np.sum(obs_arr))
+        var total_theor = Float64(np.sum(theor))
+        if total_obs <= 0 or total_theor <= 0:
+            return 0.0
+        var max_dev: Float64 = 0.0
+        for i in range(len(self.cg_content)):
+            var o_pct = (Float64(self.cg_content[i]) / total_obs) * 100.0
+            var t_val = Float64(theor[Int(i)])
+            var t_pct = (t_val / total_theor) * 100.0
+            var dev = o_pct - t_pct
+            if dev < 0:
+                dev = -dev
+            if dev > max_dev:
+                max_dev = dev
+        return max_dev
+
+    fn _get_status(self) raises -> String:
+        var max_dev = self._max_gc_deviation()
+        if max_dev > GC_SEQUENCE_ERROR:
+            return "fail"
+        if max_dev > GC_SEQUENCE_WARN:
+            return "warn"
+        return "pass"
+
     fn plot(self) raises -> PythonObject:
         var plt = Python.import_module("matplotlib.pyplot")
         var arr = tensor_to_numpy_1d(self.cg_content)
@@ -93,7 +123,7 @@ struct CGContent(Analyser, Copyable, Movable):
         var encoded_fig1 = encode_img_b64(fig)
         var result_1 = result_panel(
             "cg_content",
-            "pass",
+            self._get_status(),
             "Per sequence GC content",
             encoded_fig1,
         )

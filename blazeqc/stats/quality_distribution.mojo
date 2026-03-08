@@ -19,6 +19,14 @@ from blazeqc.CONSTS import (
     generic_schema,
 )
 from blazeqc.html_maker import result_panel
+from blazeqc.limits import (
+    QUALITY_BASE_LOWER_WARN,
+    QUALITY_BASE_LOWER_ERROR,
+    QUALITY_BASE_MEDIAN_WARN,
+    QUALITY_BASE_MEDIAN_ERROR,
+    QUALITY_SEQUENCE_WARN,
+    QUALITY_SEQUENCE_ERROR,
+)
 
 
 struct QualityDistribution(Analyser, Copyable, Movable):
@@ -174,20 +182,75 @@ struct QualityDistribution(Analyser, Copyable, Movable):
 
         return Tuple(fig, fig2)
 
+    fn _get_status_per_base(self) -> String:
+        """Status from per-base quality: lower quartile and median (FastQC)."""
+        var schema = self._guess_schema()
+        var offset = schema.OFFSET
+        var min_q25_phred: Float64 = 1e9
+        var min_median_phred: Float64 = 1e9
+        for row in range(self.qu_dist.rows):
+            var total: Int64 = 0
+            for col in range(self.qu_dist.cols):
+                total += self.qu_dist.get(row, col)
+            if total == 0:
+                continue
+            var cum: Int64 = 0
+            var q25_phred: Float64 = -1.0
+            var median_phred: Float64 = -1.0
+            for col in range(self.qu_dist.cols):
+                cum += self.qu_dist.get(row, col)
+                if q25_phred < 0 and Float64(cum) >= 0.25 * Float64(total):
+                    q25_phred = Float64(col) - Float64(offset)
+                if median_phred < 0 and Float64(cum) >= 0.5 * Float64(total):
+                    median_phred = Float64(col) - Float64(offset)
+                    break
+            if q25_phred >= 0 and q25_phred < min_q25_phred:
+                min_q25_phred = q25_phred
+            if median_phred >= 0 and median_phred < min_median_phred:
+                min_median_phred = median_phred
+        if min_q25_phred > 1e8:
+            min_q25_phred = 0.0
+        if min_median_phred > 1e8:
+            min_median_phred = 0.0
+        if min_q25_phred < QUALITY_BASE_LOWER_ERROR or min_median_phred < QUALITY_BASE_MEDIAN_ERROR:
+            return "fail"
+        if min_q25_phred < QUALITY_BASE_LOWER_WARN or min_median_phred < QUALITY_BASE_MEDIAN_WARN:
+            return "warn"
+        return "pass"
+
+    fn _get_status_per_sequence(self) -> String:
+        """Status from per-sequence quality: most frequent mean Phred (FastQC)."""
+        var schema = self._guess_schema()
+        var offset = schema.OFFSET
+        var max_count: Int64 = 0
+        var mode_phred: Float64 = 0.0
+        for i in range(len(self.qu_dist_seq)):
+            var c = self.qu_dist_seq[i]
+            if c > max_count:
+                max_count = c
+                mode_phred = Float64(i) - Float64(offset)
+        if max_count == 0:
+            return "pass"
+        if mode_phred < QUALITY_SEQUENCE_ERROR:
+            return "fail"
+        if mode_phred < QUALITY_SEQUENCE_WARN:
+            return "warn"
+        return "pass"
+
     fn make_html(self) raises -> Tuple[result_panel, result_panel]:
         fig1, fig2 = self.plot()
         var encoded_fig1 = encode_img_b64(fig1)
         var encoded_fig2 = encode_img_b64(fig2)
         var result_1 = result_panel(
             "qu_score_dis_base",
-            "pass",
+            self._get_status_per_base(),
             "Quality Scores Distribtion",
             encoded_fig1,
         )
 
         var result_2 = result_panel(
             "qu_score_dis_seq",
-            "pass",
+            self._get_status_per_sequence(),
             "Mean Quality distribution",
             encoded_fig2,
         )

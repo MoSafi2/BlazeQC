@@ -157,5 +157,24 @@ def test_guess_schema_illumina_15():
     assert_equal(Int(schema.OFFSET), 64)
 
 
+# ----- _get_status_per_base, _get_status_per_sequence -----
+
+
+def test_quality_dist_status_per_base_pass():
+    var qd = QualityDistribution()
+    for _ in range(100):
+        var rec = FastqRecord("r", "ACGTACGTACGT", "IIIIIIIIIIII")
+        qd.tally_read(rec)
+    assert_equal(qd._get_status_per_base(), "pass")
+
+
+def test_quality_dist_status_per_sequence_pass():
+    var qd = QualityDistribution()
+    for _ in range(100):
+        var rec = FastqRecord("r", "ACGTACGTACGT", "IIIIIIIIIIII")
+        qd.tally_read(rec)
+    assert_equal(qd._get_status_per_sequence(), "pass")
+
+
 def main():
     TestSuite.discover_tests[__functions_in_module()]().run()

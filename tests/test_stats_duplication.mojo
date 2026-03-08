@@ -135,5 +135,38 @@ def test_over_repr_zero_percentage():
     assert_equal(ors.percentage, 0.0)
 
 
+# ----- _get_status_duplication (pass/warn/fail) -----
+# DUPLICATION_WARN=70, DUPLICATION_ERROR=50. Percent remaining after dedup.
+
+
+def test_dup_status_pass():
+    var dr = DupReads()
+    for i in range(20):
+        var rec = FastqRecord("r" + str(i), "ACGTACGTACGT", "IIIIIIIIIIII")
+        dr.tally_read(rec)
+    assert_equal(dr._get_status_duplication(20), "pass")
+
+
+def test_dup_status_warn():
+    var dr = DupReads()
+    for i in range(20):
+        var rec = FastqRecord("r" + str(i), "ACGTACGTACGT", "IIIIIIIIIIII")
+        dr.tally_read(rec)
+    for i in range(20, 60):
+        for _ in range(2):
+            var rec = FastqRecord("r" + str(i), "ACGTACGTACGT", "IIIIIIIIIIII")
+            dr.tally_read(rec)
+    assert_equal(dr._get_status_duplication(100), "warn")
+
+
+def test_dup_status_fail():
+    var dr = DupReads()
+    for i in range(50):
+        for _ in range(4):
+            var rec = FastqRecord("r" + str(i), "ACGTACGTACGT", "IIIIIIIIIIII")
+            dr.tally_read(rec)
+    assert_equal(dr._get_status_duplication(200), "fail")
+
+
 def main():
     TestSuite.discover_tests[__functions_in_module()]().run()

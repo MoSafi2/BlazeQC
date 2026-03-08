@@ -102,5 +102,17 @@ def test_cg_content_tally_single_base_a():
     assert_equal(cg.cg_content[0], 1)
 
 
+# ----- _get_status (pass/warn/fail) -----
+
+
+def test_cg_content_status_returns_pass_warn_or_fail() raises:
+    var cg = CGContent()
+    for _ in range(200):
+        var rec = FastqRecord("r", "ACGTACGTACGT", "IIIIIIIIIIII")
+        cg.tally_read(rec)
+    var status = cg._get_status()
+    assert_true(status == "pass" or status == "warn" or status == "fail")
+
+
 def main():
     TestSuite.discover_tests[__functions_in_module()]().run()

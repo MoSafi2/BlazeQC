@@ -12,6 +12,7 @@ from blazeqc.helpers import (
     matrix_to_numpy,
 )
 from blazeqc.html_maker import result_panel
+from blazeqc.limits import TILE_WARN, TILE_ERROR
 
 
 struct TileQualityEntry(Copyable, Movable):
@@ -281,9 +282,9 @@ struct PerTileQuality(Analyser, Copyable, Movable):
         return fig
 
     fn _get_status(self) -> String:
-        if self.max_deviation > 5.0:
+        if self.max_deviation > TILE_ERROR:
             return "fail"
-        if self.max_deviation > 2.0:
+        if self.max_deviation > TILE_WARN:
             return "warn"
         return "pass"
 

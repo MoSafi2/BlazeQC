@@ -7,6 +7,7 @@ from blazeqc.stats.analyser import Analyser
 from blazeqc.stats.over_represented import OverRepresentedSequence
 from blazeqc.helpers import list_float64_to_numpy, encode_img_b64
 from blazeqc.html_maker import result_panel, _make_row, _make_table
+from blazeqc.limits import DUPLICATION_WARN, DUPLICATION_ERROR
 
 
 struct DupReads(Analyser, Copyable, Movable):
@@ -209,6 +210,26 @@ struct DupReads(Analyser, Copyable, Movable):
 
         return (fig^, overrepresented_seqs^)
 
+    fn _percent_remaining_after_dedup(mut self, total_reads: Int) -> Float64:
+        """Percentage of library remaining after deduplication (FastQC metric)."""
+        self.predict_reads()
+        var dedup_total: Float64 = 0
+        var raw_total: Float64 = 0
+        for entry in self.corrected_counts.items():
+            dedup_total += entry.value
+            raw_total += entry.value * Float64(entry.key)
+        if raw_total <= 0:
+            return 100.0
+        return (dedup_total / raw_total) * 100.0
+
+    fn _get_status_duplication(mut self, total_reads: Int) -> String:
+        var pct = self._percent_remaining_after_dedup(total_reads)
+        if pct < DUPLICATION_ERROR:
+            return "fail"
+        if pct < DUPLICATION_WARN:
+            return "warn"
+        return "pass"
+
     fn make_html(
         mut self, total_reads: Int
     ) raises -> Tuple[result_panel, result_panel]:
@@ -217,7 +238,7 @@ struct DupReads(Analyser, Copyable, Movable):
         var encoded_fig1 = encode_img_b64(fig)
         var result_1 = result_panel(
             "dup_reads",
-            "pass",
+            self._get_status_duplication(total_reads),
             "Sequence Duplication Levels",
             encoded_fig1,
         )

@@ -135,5 +135,32 @@ def test_get_size_distribution_interval_nonnegative():
     assert_true((1000 - 0) / interval <= 50)
 
 
+# ----- _get_status (pass/warn/fail) -----
+
+
+def test_length_dist_status_fail_zero_length():
+    var ld = LengthDistribution()
+    var rec = FastqRecord("r1", "A", "I")  # length 1 -> slot 0
+    ld.tally_read(rec)
+    assert_equal(ld._get_status(), "fail")
+
+
+def test_length_dist_status_warn_multiple_lengths():
+    var ld = LengthDistribution()
+    var rec2 = FastqRecord("r1", "AC", "II")
+    var rec4 = FastqRecord("r2", "ACGT", "IIII")
+    ld.tally_read(rec2)
+    ld.tally_read(rec4)
+    assert_equal(ld._get_status(), "warn")
+
+
+def test_length_dist_status_pass_single_length():
+    var ld = LengthDistribution()
+    var rec = FastqRecord("r1", "ACGT", "IIII")
+    ld.tally_read(rec)
+    ld.tally_read(rec)
+    assert_equal(ld._get_status(), "pass")
+
+
 def main():
     TestSuite.discover_tests[__functions_in_module()]().run()

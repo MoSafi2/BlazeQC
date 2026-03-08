@@ -9,6 +9,7 @@ from blazeqc.helpers import (
     encode_img_b64,
 )
 from blazeqc.html_maker import result_panel
+from blazeqc.limits import ADAPTER_WARN, ADAPTER_ERROR
 from blazeseq import FastqRecord, RefRecord
 
 
@@ -127,12 +128,31 @@ struct AdapterContent[bits: Int = 3](Analyser):
 
         return fig
 
+    fn _get_status(self, total_reads: Int64) -> String:
+        # Warn if read length too short to analyse adapter (kmer_len)
+        if total_reads == 0:
+            return "pass"
+        if self.max_length < self.kmer_len:
+            return "warn"
+        var max_count: Int64 = 0
+        for i in range(self.hash_counts.rows):
+            for j in range(self.hash_counts.cols):
+                var c = self.hash_counts.get(i, j)
+                if c > max_count:
+                    max_count = c
+        var pct = (Float64(max_count) / Float64(total_reads)) * 100.0
+        if pct > ADAPTER_ERROR:
+            return "fail"
+        if pct > ADAPTER_WARN:
+            return "warn"
+        return "pass"
+
     fn make_html(self, total_reads: Int64) raises -> result_panel:
         fig1 = self.plot(total_reads)
         var encoded_fig1 = encode_img_b64(fig1)
         var result_1 = result_panel(
             "adapter_content",
-            "pass",
+            self._get_status(total_reads),
             "Adapter Content",
             encoded_fig1,
         )

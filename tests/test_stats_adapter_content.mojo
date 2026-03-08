@@ -130,5 +130,41 @@ def test_adapter_content_illumina_universal_match():
     assert_true(hit > 0)
 
 
+# ----- _get_status (pass/warn/fail) -----
+# ADAPTER_WARN=5, ADAPTER_ERROR=10. Also warn if max_length < kmer_len.
+
+
+def test_adapter_content_status_warn_short_reads():
+    var hashes = get_hash_list()
+    var ac = AdapterContent(hashes^, 12)
+    var short_rec = FastqRecord("r1", "ACGTACGT", "IIIIIIII")  # length 8 < 12
+    ac.tally_read(short_rec)
+    assert_equal(ac._get_status(1), "warn")
+
+
+def test_adapter_content_status_fail():
+    var hashes = get_hash_list()
+    var ac = AdapterContent(hashes^, 12)
+    var rec = FastqRecord("r1", "AGATCGGAAGAGACGT", "IIIIIIIIIIIIIIII")
+    ac.tally_read(rec)
+    assert_equal(ac._get_status(9), "fail")  # 1/9*100 > 10
+
+
+def test_adapter_content_status_warn():
+    var hashes = get_hash_list()
+    var ac = AdapterContent(hashes^, 12)
+    var rec = FastqRecord("r1", "AGATCGGAAGAGACGT", "IIIIIIIIIIIIIIII")
+    ac.tally_read(rec)
+    assert_equal(ac._get_status(19), "warn")  # 1/19*100 > 5
+
+
+def test_adapter_content_status_pass():
+    var hashes = get_hash_list()
+    var ac = AdapterContent(hashes^, 12)
+    var rec = FastqRecord("r1", "AGATCGGAAGAGACGT", "IIIIIIIIIIIIIIII")
+    ac.tally_read(rec)
+    assert_equal(ac._get_status(100), "pass")  # 1%
+
+
 def main():
     TestSuite.discover_tests[__functions_in_module()]().run()
