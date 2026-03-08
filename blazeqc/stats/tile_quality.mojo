@@ -143,8 +143,8 @@ struct PerTileQuality(Analyser, Copyable, Movable):
         """Produce a per-tile quality deviation heatmap matching FastQC output.
 
         Algorithm (mirrors FastQC PerTileQualityScores.getPercentages):
-          1. Sort tile IDs and bin read positions into exponential groups
-             (e.g. 1,2,...,9,10-14,15-19,...) via make_linear_base_groups().
+          1. Sort tile IDs and bin read positions into linear base groups
+             (e.g. 1,2,...,9, then interval-based groups) via make_linear_base_groups().
           2. For each tile, compute the mean quality per position group:
                mean[t][g] = sum(quality[g_start:g_end]) / (count * group_width)
           3. Compute the cross-tile average per group:
@@ -244,12 +244,23 @@ struct PerTileQuality(Analyser, Copyable, Movable):
 
         var x_labels = Python.list()
         for g in range(n_groups):
-            x_labels.append(groups[g])
+            var start_bp = groups[g]
+            var end_bp: Int
+            if g + 1 < n_groups:
+                end_bp = groups[g + 1] - 1
+            else:
+                end_bp = self.max_length
+            var width = end_bp - start_bp + 1
+            if width == 1:
+                x_labels.append(String(start_bp))
+            else:
+                x_labels.append(String(start_bp) + "-" + String(end_bp))
 
         var y_labels = Python.list()
         for t in range(n_tiles):
             y_labels.append(tile_ids[t])
 
+        # Symmetric diverging scale: use actual max absolute deviation so red/blue both visible
         var vmax = self.max_deviation if self.max_deviation > 0.0 else 1.0
         var z = plt.subplots(figsize=Python.tuple(10, max(4, n_tiles // 4 + 2)))
         var fig = z[0]
