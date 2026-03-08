@@ -36,6 +36,8 @@ struct LengthDistribution(Analyser, Copyable, Movable):
         self, min_val: Int, max_val: Int
     ) -> Tuple[Int, Int]:
         # We won't group if they've asked us not to
+        # if max_val <= min_val:
+        #     return (min_val, 1)
 
         base = 1
 
@@ -67,57 +69,94 @@ struct LengthDistribution(Analyser, Copyable, Movable):
         var np = Python.import_module("numpy")
         var mtp = Python.import_module("matplotlib")
 
-        var min_val: Int = 0
-        var max_val: Int = len(self.length_vector)
+        # Find actual min/max lengths (length_vector[i] = count of seqs with length i+1)
+        var min_len: Int = 0
+        var max_len: Int = len(self.length_vector)
 
         for i in range(len(self.length_vector)):
             if self.length_vector[i] > 0:
-                min_val = i
+                min_len = i + 1  # actual length
                 break
 
-        _, interval = self.get_size_distribution(min_val, max_val)
+        # Add padding either side (matching Java: minLen--, maxLen++)
+        if min_len > 0:
+            min_len -= 1
+        max_len += 1
+
+        starting, interval = self.get_size_distribution(min_len, max_len)
+
+        # Build bins starting at computed starting point (matching Java)
         bins = List[Int]()
-        start = 0
-        while start <= max_val:
+        var start = starting
+        while start <= max_len:
             bins.append(start)
             start += interval
 
-        var arr = tensor_to_numpy_1d(self.length_vector)
+        # Build x-axis category labels matching Java: "n" if interval==1, "n-m" otherwise
+        var x_categories = List[String]()
+        for i in range(len(bins)):
+            var min_value = bins[i]
+            var max_value = bins[i] + interval - 1
+            if max_value > max_len:
+                max_value = max_len
+            if interval == 1:
+                x_categories.append(String(min_value))
+            else:
+                x_categories.append(String(min_value) + "-" + String(max_value))
 
-        var x = plt.subplots()  # Create a figure
+        # arr3[j] = count of seqs with length j (matches Java's lengthCounts[seqLen])
+        var arr = tensor_to_numpy_1d(self.length_vector)
+        var arr2 = np.insert(arr, 0, 0)   # prepend so arr2[1] = count for length 1
+        var arr3 = np.append(arr2, 0)      # append trailing zero for padding
+
+        arr3, _ = bin_array(arr3, bins, func="sum")
+
+        var x = plt.subplots()
         var fig = x[0]
         var ax = x[1]
 
-        var arr2 = np.insert(arr, 0, 0)
-        var arr3 = np.append(arr2, 0)
-        # bins = make_linear_base_groups(self.length_vector.num_elements())
-        arr3, py_bins = bin_array(arr3, bins, func="mean")
-
         var ticks = Python.list()
-        for i in range(len(bins)):
+        var labels = Python.list()
+        for i in range(len(x_categories)):
             ticks.append(i)
+            labels.append(x_categories[i])
 
         ax.plot(arr3)
 
         ax.set_xticks(ticks)
-        ax.set_xticklabels(py_bins, rotation=45)
+        ax.set_xticklabels(labels, rotation=45)
         ax.xaxis.set_major_locator(
             mtp.ticker.MaxNLocator(integer=True, nbins=15)
         )
-        # ax.set_xlim(np.argmax(arr3 > 0) - 1, len(arr3) - 1)
+        ax.set_xlim(np.argmax(arr3 > 0) - 1, len(arr3))
         ax.set_ylim(0)
         ax.set_title("Distribution of sequence lengths over all sequences")
         ax.set_xlabel("Sequence Length (bp)")
+        ax.set_ylabel("Number of Reads")
 
         return fig
+
+    fn _get_status(self) -> String:
+        # Error if any zero-length sequences exist (matching Java raisesError)
+        if len(self.length_vector) > 0 and self.length_vector[0] > 0:
+            return "fail"
+        # Warning if sequences have more than one distinct length (matching Java raisesWarning)
+        var seen_length = False
+        for i in range(len(self.length_vector)):
+            if self.length_vector[i] > 0:
+                if seen_length:
+                    return "warn"
+                else:
+                    seen_length = True
+        return "pass"
 
     fn make_html(self) raises -> result_panel:
         fig = self.plot()
         var encoded_fig1 = encode_img_b64(fig)
         var result_1 = result_panel(
             "seq_len_dis",
-            "pass",
-            "Sequence Duplication Levels",
+            self._get_status(),
+            "Length Distribution",
             encoded_fig1,
         )
 

@@ -121,9 +121,9 @@ def test_bin_array_sum():
     bins.append(4)
     var binned, _ = bin_array(arr, bins, "sum")
     assert_equal(Int(py=binned.shape[0]), 3)
-    assert_equal(Float64(py=binned.item(0)), 0.0)
+    assert_equal(Float64(py=binned.item(0)), 3.0)
     assert_equal(Float64(py=binned.item(1)), 3.0)
-    assert_equal(Float64(py=binned.item(2)), 3.0)
+    assert_equal(Float64(py=binned.item(2)), 4.0)
 
 
 def test_bin_array_mean():

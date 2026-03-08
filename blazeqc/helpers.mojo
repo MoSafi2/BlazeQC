@@ -148,7 +148,7 @@ fn bin_array(
     var x = np.linspace(0, arr.shape[0], arr.shape[0])
     var binned_array = np.digitize(x, py_bins)
     var py_binned_slices = Python.list()
-    for i in range(len(bins)):
+    for i in range(1, len(bins) + 1):
         var mask = np.equal(binned_array, i)
         var t1 = np.compress(mask, arr, axis=0)
         var t2: PythonObject

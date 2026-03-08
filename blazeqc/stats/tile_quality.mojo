@@ -4,7 +4,12 @@ from collections.dict import DictEntry, Dict, default_hasher
 from python import Python, PythonObject
 from blazeseq import FastqRecord, RefRecord
 from blazeqc.stats.analyser import Analyser
-from blazeqc.helpers import tensor_to_numpy_1d, encode_img_b64, grow_tensor
+from blazeqc.helpers import (
+    tensor_to_numpy_1d,
+    encode_img_b64,
+    grow_tensor,
+    make_linear_base_groups,
+)
 from blazeqc.html_maker import result_panel
 
 
@@ -34,6 +39,8 @@ struct PerTileQuality(Analyser, Copyable, Movable):
     var n: Int
     var map: Dict[Int, TileQualityEntry]
     var max_length: Int
+    var enabled: Bool
+    var max_deviation: Float64
 
     fn __init__(out self):
         self.map = Dict[Int, TileQualityEntry](
@@ -41,19 +48,25 @@ struct PerTileQuality(Analyser, Copyable, Movable):
         )
         self.n = 0
         self.max_length = 0
+        self.enabled = True
+        self.max_deviation = 0.0
 
-    # TODO: Add tracking for the number of items inside the hashmaps to limit it to 2_500 items.
     fn tally_read(mut self, record: FastqRecord):
+        if not self.enabled:
+            return
         self.n += 1
         if self.n >= 10_000:
             if self.n % 10 != 0:
                 return
 
         var x = self._find_tile_info(record)
+        if x == -1:
+            self.enabled = False
+            return
         var val = self._find_tile_value(record, x)
 
         # Low-level access to the hashmap to avoid the overhead of calling `_find_index` multiple times.
-        # Should be replcaed with a cleaner version once Mojo dict is more performant.
+        # Should be replaced with a cleaner version once Mojo dict is more performant.
 
         index = self.map._find_index(hash(val), val)
 
@@ -75,6 +88,9 @@ struct PerTileQuality(Analyser, Copyable, Movable):
             ](val, deref_value^)
 
         else:
+            if len(self.map) >= 2500:
+                self.enabled = False
+                return
             self.map[val] = TileQualityEntry(val, 1, len(record))
 
         if self.max_length < len(record):

@@ -112,7 +112,8 @@ struct BasepairDistribution(Analyser):
         ax2.set_xlabel("Position in read (bp)")
         ax2.set_title("N percentage")
 
-        return fig, fig2
+        # Return (N figure, base figure) so make_html receives fig1=N, fig2=base
+        return fig2, fig
 
     @always_inline
     fn make_grade(self, grades: Dict[String, Int]):
@@ -124,16 +125,17 @@ struct BasepairDistribution(Analyser):
         fig1, fig2 = self.plot(total_reads)
         var encoded_fig1 = encode_img_b64(fig1)
         var encoded_fig2 = encode_img_b64(fig2)
+        # fig1 = N figure, fig2 = base figure (see plot() return order)
         var result_1 = result_panel(
-            "base_pair_distribution",
+            "n_percentage",
             "pass",
-            "Base Pair Distribtion",
+            "N percentage",
             encoded_fig1,
         )
         var result_2 = result_panel(
-            "n_percentage",
+            "base_pair_distribution",
             "pass",
-            "N Percentage (%)",
+            "Base Distribution",
             encoded_fig2,
         )
 
