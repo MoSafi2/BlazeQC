@@ -1,6 +1,7 @@
 """CG content: composable Collector, Summarizer (with plotting), assembled CGModule."""
 
 from collections.list import List
+from math import sqrt, exp, pi
 from python import Python, PythonObject
 from blazeseq import FastqRecord, RefRecord
 from blazeqc.stats.analyser import Analyser
@@ -13,7 +14,7 @@ from blazeqc.stats.traits import (
     HtmlOutput,
     DefaultOutputter,
 )
-from blazeqc.helpers import tensor_to_numpy_1d
+from blazeqc.helpers import tensor_to_numpy_1d, list_float64_to_numpy
 from blazeqc.html_maker import result_panel
 from blazeqc.limits import GC_SEQUENCE_WARN, GC_SEQUENCE_ERROR
 
@@ -66,13 +67,13 @@ struct CGCollector(Analyser, Copyable, Movable):
 
 struct CGSummarizer(StatSummarizer, Copyable, Movable):
     """Summarization and plotting in one struct. Feed collector then prepare(ctx)."""
-    var _cache_theoretical: PythonObject
+    var _cache_theoretical: List[Float64]
     var _cache_cg_content: List[Int64]
     var _cache_grade: String
     var _cache_ready: Bool
 
     fn __init__(out self) raises:
-        self._cache_theoretical = Python.evaluate("None")
+        self._cache_theoretical = List[Float64]()
         self._cache_cg_content = List[Int64]()
         self._cache_grade = ""
         self._cache_ready = False
@@ -83,31 +84,83 @@ struct CGSummarizer(StatSummarizer, Copyable, Movable):
         for i in range(len(collector.cg_content)):
             self._cache_cg_content.append(collector.cg_content[i])
 
-    fn _calculate_theoretical_distribution(self, counts: List[Int64]) raises -> PythonObject:
-        var np = Python.import_module("numpy")
-        var sc = Python.import_module("scipy")
-        var arr = tensor_to_numpy_1d(counts)
-        var total_counts = np.sum(arr)
-        var x_categories = np.arange(len(arr))
-        var mode = np.argmax(arr)
-        var stdev = np.sqrt(
-            np.sum((x_categories - mode) ** 2 * arr) / (total_counts - 1)
-        )
-        var nd = sc.stats.norm(loc=mode, scale=stdev)
-        return nd.pdf(x_categories) * total_counts
+    fn _calculate_theoretical_distribution(self, counts: List[Int64]) -> List[Float64]:
+        """Compute a theoretical normal distribution fitted to the observed GC bin counts.
 
-    fn _max_gc_deviation(self) raises -> Float64:
-        var np = Python.import_module("numpy")
-        var obs_arr = tensor_to_numpy_1d(self._cache_cg_content)
-        var total_obs = Float64(py=np.sum(obs_arr))
-        var theor = self._cache_theoretical
-        var total_theor = Float64(py=np.sum(theor))
+        Algorithm: 
+        (1) Sum counts and find the mode (GC bin with maximum count).
+        (2) Compute weighted standard deviation: sum over bins of (bin - mode)^2 * count,
+        divided by (total - 1).
+        (3) Evaluate the normal PDF with that mean and stdev at
+        each bin index, scaled by total count so the curve matches total reads. If
+        total is 0 or stdev is 0, returns zeros or a spike at the mode respectively.
+        """
+        var n = len(counts)
+        var result = List[Float64](length=n, fill=0.0)
+
+        # Total number of reads across all GC bins
+        var total_counts: Int64 = 0
+        for i in range(n):
+            total_counts += counts[i]
+
+        if total_counts == 0:
+            return result^
+
+        # Mode = bin index with highest count (location of the normal)
+        var mode: Int = 0
+        var max_count: Int64 = counts[0]
+        for i in range(1, n):
+            if counts[i] > max_count:
+                max_count = counts[i]
+                mode = i
+
+        # Weighted variance: sum of (x - mode)^2 * weight, then stdev = sqrt(variance)
+        var stdev: Float64 = 0.0
+        if total_counts > 1:
+            var sum_sq: Float64 = 0.0
+            for i in range(n):
+                var diff = Float64(i) - Float64(mode)
+                sum_sq += diff * diff * Float64(counts[i])
+            stdev = sqrt(sum_sq / Float64(total_counts - 1))
+
+        var total_f = Float64(total_counts)
+        var mode_f = Float64(mode)
+        # Degenerate case: all mass at mode
+        if stdev == 0.0:
+            result[mode] = total_f
+            return result^
+
+        # Normal PDF: (1 / (stdev * sqrt(2*pi))) * exp(-0.5 * z^2), scaled by total
+        var scale = stdev * sqrt(2.0 * pi)
+        for i in range(n):
+            var x = Float64(i)
+            var z = (x - mode_f) / stdev
+            result[i] = (exp(-0.5 * z * z) / scale) * total_f
+
+        return result^
+
+    fn _max_gc_deviation(self) -> Float64:
+        """Maximum absolute percentage-point deviation between observed and theoretical GC distribution.
+
+        For each GC bin, observed and theoretical are expressed as percentages of their
+        respective totals. The deviation is |obs_pct - theor_pct|. Returns the maximum
+        over all bins; used to assign pass/warn/fail from GC_SEQUENCE_* limits.
+        """
+        var total_obs: Float64 = 0.0
+        for i in range(len(self._cache_cg_content)):
+            total_obs += Float64(self._cache_cg_content[i])
+
+        var total_theor: Float64 = 0.0
+        for i in range(len(self._cache_theoretical)):
+            total_theor += self._cache_theoretical[i]
+
         if total_obs <= 0 or total_theor <= 0:
             return 0.0
+
         var max_dev: Float64 = 0.0
         for i in range(len(self._cache_cg_content)):
             var o_pct = (Float64(self._cache_cg_content[i]) / total_obs) * 100.0
-            var t_val = Float64(py=theor[Int(i)])
+            var t_val = self._cache_theoretical[i]
             var t_pct = (t_val / total_theor) * 100.0
             var dev = o_pct - t_pct
             if dev < 0:
@@ -156,7 +209,7 @@ struct CGSummarizer(StatSummarizer, Copyable, Movable):
         var fig = x[0]
         var ax = x[1]
         ax.plot(arr, label="GC count per read")
-        ax.plot(self._cache_theoretical, label="Theoritical Distribution")
+        ax.plot(list_float64_to_numpy(self._cache_theoretical), label="Theoritical Distribution")
         ax.set_title("GC distribution over all sequences")
         ax.set_xlabel("Mean GC content (%)")
         var figs = List[PythonObject]()
