@@ -5,6 +5,7 @@ from collections.list import List
 from python import Python, PythonObject
 from blazeseq import FastqRecord, RefRecord
 from blazeqc.stats.analyser import Analyser
+from blazeqc.stats.traits import SummaryContext
 from blazeqc.stats.basepair_distribution import BasepairDistribution
 from blazeqc.stats.cg_content import CGContent
 from blazeqc.stats.duplication import DupReads
@@ -73,8 +74,8 @@ struct FullStats(Copyable):
     @always_inline
     fn make_base_stats(self) raises -> result_panel:
         var sum: Int64 = 0
-        for i in range(len(self.cg_content.cg_content)):
-            sum += self.cg_content.cg_content[i] * i
+        for i in range(len(self.cg_content.collector.cg_content)):
+            sum += self.cg_content.collector.cg_content[i] * i
         var avg_cg = sum / self.num_reads
         var schema = self.qu_dist._guess_schema()
 
@@ -145,7 +146,9 @@ struct FullStats(Copyable):
         var bp_plots = self.bp_dist.plot(self.num_reads)
         plots.append(bp_plots[0])
         plots.append(bp_plots[1])
-        plots.append(self.cg_content.plot())
+        var cg_plots = self.cg_content.to_plot()
+        for p in cg_plots:
+            plots.append(p)
         plots.append(self.len_dist.plot())
         var dup_plot_result = self.dup_reads.plot(Int(self.num_reads))
         plots.append(dup_plot_result[0])
@@ -159,10 +162,11 @@ struct FullStats(Copyable):
 
     fn prepare_data(mut self, file_name: String) raises:
         """Fill all module caches. Call before write_data and build_panels."""
+        var ctx = SummaryContext(self.num_reads, self.total_bases, file_name)
         self.qu_dist.prepare_data()
         self.tile_qual.prepare_data()
         self.bp_dist.prepare_data(self.num_reads)
-        self.cg_content.prepare_data()
+        self.cg_content.prepare(ctx)
         self.len_dist.prepare_data()
         self.dup_reads.prepare_data(Int(self.num_reads))
         self.adpt_cont.prepare_data(self.num_reads)
@@ -176,8 +180,8 @@ struct FullStats(Copyable):
 
             # Basic Statistics
             var sum: Int64 = 0
-            for i in range(len(self.cg_content.cg_content)):
-                sum += self.cg_content.cg_content[i] * i
+            for i in range(len(self.cg_content.collector.cg_content)):
+                sum += self.cg_content.collector.cg_content[i] * i
             var avg_cg = sum / self.num_reads
             var schema = self.qu_dist._guess_schema()
             var total_bases_str = format_length(Float64(self.total_bases))
@@ -204,10 +208,11 @@ struct FullStats(Copyable):
             f.write(">>END_MODULE\n")
 
             # Module blocks in panel order (each returns its block text)
+            var ctx = SummaryContext(self.num_reads, self.total_bases, file_name)
             f.write(self.qu_dist.get_module_data())
             f.write(self.tile_qual.get_module_data())
             f.write(self.bp_dist.get_module_data(self.num_reads))
-            f.write(self.cg_content.get_module_data())
+            f.write(self.cg_content.to_data_text(ctx))
             f.write(self.len_dist.get_module_data())
             f.write(self.dup_reads.get_module_data(Int(self.num_reads)))
             f.write(self.adpt_cont.get_module_data(self.num_reads))
@@ -232,8 +237,10 @@ struct FullStats(Copyable):
         panels[base_pair_distribution.legand] = base_pair_distribution^
         panels[base_pair_N_percentage.legand] = base_pair_N_percentage^
 
-        var per_sequence_cg_content = self.cg_content.make_html()
-        panels[per_sequence_cg_content.legand] = per_sequence_cg_content^
+        var cg_panels = self.cg_content.to_html_panels()
+        for i in range(len(cg_panels)):
+            var panel = cg_panels[i].copy()
+            panels[panel.legand] = panel^
 
         var sequence_length_distribution = self.len_dist.make_html()
         panels[sequence_length_distribution.legand] = sequence_length_distribution^

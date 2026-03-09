@@ -2,6 +2,7 @@
 
 from blazeseq import FastqRecord
 from blazeqc.stats.cg_content import CGContent
+from blazeqc.stats.traits import SummaryContext
 from testing import assert_equal, assert_true, TestSuite
 
 
@@ -10,20 +11,19 @@ from testing import assert_equal, assert_true, TestSuite
 
 def test_cg_content_init_list_length():
     var cg = CGContent()
-    assert_equal(len(cg.cg_content), 101)
+    assert_equal(len(cg.collector.cg_content), 101)
 
 
 def test_cg_content_init_all_zeros():
     var cg = CGContent()
     for i in range(101):
-        assert_equal(cg.cg_content[i], 0)
+        assert_equal(cg.collector.cg_content[i], 0)
 
 
-def test_cg_content_init_theoretical_zeros():
+def test_cg_content_init_summarizer_not_ready():
     var cg = CGContent()
-    assert_equal(len(cg.theoritical_distribution), 101)
-    for i in range(101):
-        assert_equal(cg.theoritical_distribution[i], 0)
+    var body = cg.summarizer.data_block_body()
+    assert_equal(body, "")
 
 
 # ----- 2. tally_read — GC detection logic -----
@@ -36,8 +36,8 @@ def test_cg_content_tally_100_percent_gc():
     var cg = CGContent()
     var rec = FastqRecord("r1", "CCGG", "IIII")
     cg.tally_read(rec)
-    assert_equal(cg.cg_content[100], 1)
-    assert_equal(cg.cg_content[0], 0)
+    assert_equal(cg.collector.cg_content[100], 1)
+    assert_equal(cg.collector.cg_content[0], 0)
 
 
 def test_cg_content_tally_0_percent_gc():
@@ -45,8 +45,8 @@ def test_cg_content_tally_0_percent_gc():
     var cg = CGContent()
     var rec = FastqRecord("r1", "AATT", "IIII")
     cg.tally_read(rec)
-    assert_equal(cg.cg_content[0], 1)
-    assert_equal(cg.cg_content[100], 0)
+    assert_equal(cg.collector.cg_content[0], 1)
+    assert_equal(cg.collector.cg_content[100], 0)
 
 
 def test_cg_content_tally_50_percent_gc():
@@ -54,7 +54,7 @@ def test_cg_content_tally_50_percent_gc():
     var cg = CGContent()
     var rec = FastqRecord("r1", "ACGT", "IIII")
     cg.tally_read(rec)
-    assert_equal(cg.cg_content[50], 1)
+    assert_equal(cg.collector.cg_content[50], 1)
 
 
 def test_cg_content_tally_25_percent_gc():
@@ -62,7 +62,7 @@ def test_cg_content_tally_25_percent_gc():
     var cg = CGContent()
     var rec = FastqRecord("r1", "ACAA", "IIII")
     cg.tally_read(rec)
-    assert_equal(cg.cg_content[25], 1)
+    assert_equal(cg.collector.cg_content[25], 1)
 
 
 def test_cg_content_tally_empty_record_no_change():
@@ -71,7 +71,7 @@ def test_cg_content_tally_empty_record_no_change():
     var rec = FastqRecord("r1", "", "")
     cg.tally_read(rec)
     for i in range(101):
-        assert_equal(cg.cg_content[i], 0)
+        assert_equal(cg.collector.cg_content[i], 0)
 
 
 def test_cg_content_tally_accumulates_across_reads():
@@ -82,8 +82,8 @@ def test_cg_content_tally_accumulates_across_reads():
     cg.tally_read(rec1)
     cg.tally_read(rec2)
     cg.tally_read(rec3)
-    assert_equal(cg.cg_content[100], 2)
-    assert_equal(cg.cg_content[0], 1)
+    assert_equal(cg.collector.cg_content[100], 2)
+    assert_equal(cg.collector.cg_content[0], 1)
 
 
 def test_cg_content_tally_single_base_c():
@@ -91,7 +91,7 @@ def test_cg_content_tally_single_base_c():
     var cg = CGContent()
     var rec = FastqRecord("r1", "C", "I")
     cg.tally_read(rec)
-    assert_equal(cg.cg_content[100], 1)
+    assert_equal(cg.collector.cg_content[100], 1)
 
 
 def test_cg_content_tally_single_base_a():
@@ -99,10 +99,10 @@ def test_cg_content_tally_single_base_a():
     var cg = CGContent()
     var rec = FastqRecord("r1", "A", "I")
     cg.tally_read(rec)
-    assert_equal(cg.cg_content[0], 1)
+    assert_equal(cg.collector.cg_content[0], 1)
 
 
-# ----- _get_status (pass/warn/fail) -----
+# ----- grades (pass/warn/fail) after prepare -----
 
 
 def test_cg_content_status_returns_pass_warn_or_fail():
@@ -110,7 +110,8 @@ def test_cg_content_status_returns_pass_warn_or_fail():
     for _ in range(200):
         var rec = FastqRecord("r", "ACGTACGTACGT", "IIIIIIIIIIII")
         cg.tally_read(rec)
-    var status = cg._get_status()
+    cg.prepare(SummaryContext(200, 2400, ""))
+    var status = cg.grades()[0].grade
     assert_true(status == "pass" or status == "warn" or status == "fail")
 
 
