@@ -32,7 +32,7 @@ fn main() raises:
     var next_threshold: Int64
     if fastq_file.endswith(".gz"):
         next_threshold = PROGRESS_BYTE_INTERVAL
-        var parser = FastqParser[config=config](RapidgzipReader(fastq_file, parallelism=0), "generic")
+        var parser = FastqParser[config=config](RapidgzipReader(fastq_file, parallelism=4), "generic")
         for record in parser.ref_records():
             n += 1
             stats.tally(record)

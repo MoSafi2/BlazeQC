@@ -13,11 +13,10 @@ from blazeqc.limits import ADAPTER_WARN, ADAPTER_ERROR
 from blazeseq import FastqRecord, RefRecord
 
 
-# TODO: Check how to add the analyzer Trait again
 # TODO: Also plot the Over-represented sequences.
 # TODO: Add binning
 @fieldwise_init
-struct AdapterContent[bits: Int = 3](Analyser):
+struct AdapterContent[bits: Int = 3](Analyser, Copyable, Movable):
     var kmer_len: Int
     var hash_counts: Matrix2D[DType.int64]
     var hash_list: List[UInt64]
@@ -33,25 +32,6 @@ struct AdapterContent[bits: Int = 3](Analyser):
         self._cache_pct = Matrix2D[DType.float64](0, 0)
         self._cache_ready = False
 
-    fn __copyinit__(out self, existing: Self):
-        self.kmer_len = existing.kmer_len
-        self.hash_counts = Matrix2D[DType.int64](
-            existing.hash_counts.rows, existing.hash_counts.cols
-        )
-        for i in range(existing.hash_counts.rows):
-            for j in range(existing.hash_counts.cols):
-                self.hash_counts.set(i, j, existing.hash_counts.get(i, j))
-        self.hash_list = List[UInt64](capacity=len(existing.hash_list))
-        for i in range(len(existing.hash_list)):
-            self.hash_list.append(existing.hash_list[i])
-        self.max_length = existing.max_length
-        self._cache_pct = Matrix2D[DType.float64](
-            existing._cache_pct.rows, existing._cache_pct.cols
-        )
-        for i in range(existing._cache_pct.rows):
-            for j in range(existing._cache_pct.cols):
-                self._cache_pct.set(i, j, existing._cache_pct.get(i, j))
-        self._cache_ready = existing._cache_ready
 
     @always_inline
     fn tally_read(mut self, record: FastqRecord):
