@@ -7,9 +7,9 @@ from blazeseq import FastqRecord, RefRecord
 from blazeqc.stats.traits import (
     Collector,
     Summarizer,
-    TextOutput,
     PlotOutput,
-    HtmlOutput,
+    FastqcHtmlOutput,
+    FastqcDataOutput,
 )
 from blazeqc.stats.summary_utils import SummaryContext, GradeEntry, DefaultOutputter
 from blazeqc.helpers import tensor_to_numpy_1d, list_float64_to_numpy
@@ -85,6 +85,53 @@ struct CGSummarizer(Summarizer, PlotOutput, Copyable, Movable):
         for i in range(len(collector.cg_content)):
             self._cache_cg_content.append(collector.cg_content[i])
 
+    fn summerize(mut self, ctx: SummaryContext) raises:
+        """Compute theoretical and grade from cached counts (call feed(collector) first)."""
+        self._cache_theoretical = self._calculate_theoretical_distribution(self._cache_cg_content, ctx.num_reads)
+        var max_dev = self._max_gc_deviation()
+        if max_dev > GC_SEQUENCE_ERROR:
+            self._cache_grade = "fail"
+        elif max_dev > GC_SEQUENCE_WARN:
+            self._cache_grade = "warn"
+        else:
+            self._cache_grade = "pass"
+        self._cache_ready = True
+
+    fn grade(self) -> GradeEntry:
+        return GradeEntry("Per Sequence GC Content", self._cache_grade)
+
+    fn data_block_body(self) -> String:
+        """Module-specific lines (header + data); Outputter wraps with >>name\tgrade and >>END_MODULE."""
+        if not self._cache_ready:
+            return ""
+        var body = "#GC Content\tCount\n"
+        for i in range(len(self._cache_cg_content)):
+            body += "{}\t{}\n".format(i, self._cache_cg_content[i])
+        return body
+
+    fn module_legend(self) -> String:
+        return "Per Sequence GC Content"
+
+    fn panel_id(self) -> String:
+        return "cg_content"
+
+    fn plot_result(self) raises -> PythonObject:
+        """Build GC figure from cached data (summarizer is also the plotter)."""
+        var plt = Python.import_module("matplotlib.pyplot")
+        var arr = tensor_to_numpy_1d(self._cache_cg_content)
+        var x = plt.subplots()
+        var fig = x[0]
+        var ax = x[1]
+        ax.plot(arr, label="GC count per read")
+        ax.plot(
+            list_float64_to_numpy(self._cache_theoretical),
+            label="Theoretical distribution",
+        )
+        ax.set_title("GC distribution over all sequences")
+        ax.set_xlabel("Mean GC content (%)")
+        return fig
+
+
     fn _calculate_theoretical_distribution(self, counts: List[Int64], total_counts: Int64) -> List[Float64]:
         """Compute a theoretical normal distribution fitted to the observed GC bin counts.
 
@@ -147,56 +194,11 @@ struct CGSummarizer(Summarizer, PlotOutput, Copyable, Movable):
                 max_dev = dev
         return max_dev
 
-    fn summerize(mut self, ctx: SummaryContext) raises:
-        """Compute theoretical and grade from cached counts (call feed(collector) first)."""
-        self._cache_theoretical = self._calculate_theoretical_distribution(self._cache_cg_content, ctx.num_reads)
-        var max_dev = self._max_gc_deviation()
-        if max_dev > GC_SEQUENCE_ERROR:
-            self._cache_grade = "fail"
-        elif max_dev > GC_SEQUENCE_WARN:
-            self._cache_grade = "warn"
-        else:
-            self._cache_grade = "pass"
-        self._cache_ready = True
-
-    fn grade(self) raises -> GradeEntry:
-        return GradeEntry("Per Sequence GC Content", self._cache_grade)
-
-    fn data_block_body(self) -> String:
-        """Module-specific lines (header + data); Outputter wraps with >>name\tgrade and >>END_MODULE."""
-        if not self._cache_ready:
-            return ""
-        var body = "#GC Content\tCount\n"
-        for i in range(len(self._cache_cg_content)):
-            body += "{}\t{}\n".format(i, self._cache_cg_content[i])
-        return body
-
-    fn module_legend(self) -> String:
-        return "Per Sequence GC Content"
-
-    fn panel_id(self) -> String:
-        return "cg_content"
-
-    fn plot_result(self) raises -> PythonObject:
-        """Build GC figure from cached data (summarizer is also the plotter)."""
-        var plt = Python.import_module("matplotlib.pyplot")
-        var arr = tensor_to_numpy_1d(self._cache_cg_content)
-        var x = plt.subplots()
-        var fig = x[0]
-        var ax = x[1]
-        ax.plot(arr, label="GC count per read")
-        ax.plot(
-            list_float64_to_numpy(self._cache_theoretical),
-            label="Theoretical distribution",
-        )
-        ax.set_title("GC distribution over all sequences")
-        ax.set_xlabel("Mean GC content (%)")
-        return fig
 
 
 # ----- Assembled module: Collector + Summarizer + DefaultOutputter -----
 
-struct CGModule(Collector, Summarizer, TextOutput, PlotOutput, HtmlOutput, Copyable, Movable):
+struct CGModule(Collector, Summarizer, FastqcDataOutput, FastqcHtmlOutput, Copyable, Movable):
     """Module assembled from Collector + Summarizer; uses DefaultOutputter for text/HTML."""
     var collector: CGCollector
     var summarizer: CGSummarizer
