@@ -1,5 +1,6 @@
 """Stats traits: summarization and output interfaces (separate from collection implementations)."""
 
+from collections.list import List
 from python import PythonObject
 from blazeqc.html_maker import result_panel
 from blazeseq import FastqRecord, RefRecord
@@ -24,6 +25,18 @@ trait Summarizer(Copyable, PlotOutput):
     fn grade(self) raises -> GradeEntry:
         ...
 
+    fn data_block_body(self) -> String:
+        """Raw data lines (header + rows) for the data file block."""
+        ...
+
+    fn module_legend(self) -> String:
+        """Display name for the module (e.g. for HTML report)."""
+        ...
+
+    fn panel_id(self) -> String:
+        """HTML panel id (e.g. for result_panel)."""
+        ...
+
 
 trait PlotOutput(Copyable):
     """Output: plot results."""
@@ -36,11 +49,20 @@ trait FastqcHtmlOutput(Copyable):
     fn to_html(self) raises -> result_panel:
         ...
 
+    fn to_html_panels(self) raises -> List[result_panel]:
+        """Single entry point for HTML; multi-panel modules return multiple panels."""
+        ...
 
 
 trait FastqcDataOutput(Copyable):
     """Output: FastQC-style data block text."""
     fn to_data_text(self, ctx: SummaryContext) raises -> String:
+        ...
+
+
+trait ModuleReport(FastqcDataOutput, FastqcHtmlOutput, Copyable):
+    """Container module: to_data_text, to_html_panels, and plot_result (delegates to summarizer)."""
+    fn plot_result(self) raises -> PythonObject:
         ...
 
 

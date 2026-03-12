@@ -10,6 +10,7 @@ from blazeqc.stats.traits import (
     PlotOutput,
     FastqcHtmlOutput,
     FastqcDataOutput,
+    ModuleReport,
 )
 from blazeqc.stats.summary_utils import SummaryContext, GradeEntry, DefaultOutputter
 from blazeqc.helpers import tensor_to_numpy_1d, list_float64_to_numpy
@@ -198,7 +199,7 @@ struct CGSummarizer(Summarizer, PlotOutput, Copyable, Movable):
 
 # ----- Assembled module: Collector + Summarizer + DefaultOutputter -----
 
-struct CGModule(FastqcDataOutput, FastqcHtmlOutput, Copyable, Movable):
+struct CGModule(FastqcDataOutput, FastqcHtmlOutput, ModuleReport, Copyable, Movable):
     """Module assembling CGCollector + CGSummarizer; exposes only data/text/HTML helpers."""
     var collector: CGCollector
     var summarizer: CGSummarizer
@@ -230,7 +231,9 @@ struct CGModule(FastqcDataOutput, FastqcHtmlOutput, Copyable, Movable):
         panels.append(self.to_html())
         return panels^
 
-
+    fn plot_result(self) raises -> PythonObject:
+        """Delegate to summarizer for plot; ModuleReport entry point."""
+        return self.summarizer.plot_result()
 
 @always_inline
 fn _mode(counts: List[Int64], n: Int) -> Int:

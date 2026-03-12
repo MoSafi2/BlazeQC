@@ -9,6 +9,7 @@ from blazeqc.stats.traits import (
     PlotOutput,
     FastqcHtmlOutput,
     FastqcDataOutput,
+    ModuleReport,
 )
 from blazeqc.stats.summary_utils import SummaryContext, GradeEntry, DefaultOutputter
 from blazeqc.helpers import tensor_to_numpy_1d, bin_array
@@ -138,7 +139,8 @@ struct LengthSummarizer(Summarizer, PlotOutput, Copyable, Movable):
     fn grade(self) -> GradeEntry:
         return GradeEntry("Sequence Length Distribution", self._cache_status)
 
-    fn data_block_body_(self) -> String:
+
+    fn data_block_body(self) -> String:
         """Module-specific lines (header + data)."""
         var out = "#Length\tCount\n"
         for i in range(len(self._cache_length_vector)):
@@ -146,10 +148,10 @@ struct LengthSummarizer(Summarizer, PlotOutput, Copyable, Movable):
                 out += "{}\t{}\n".format(i + 1, self._cache_length_vector[i])
         return out
 
-    fn module_legend_(self) -> String:
+    fn module_legend(self) -> String:
         return "Sequence Length Distribution"
 
-    fn panel_id_(self) -> String:
+    fn panel_id(self) -> String:
         return "seq_len_dis"
 
     fn plot_result(self) raises -> PythonObject:
@@ -190,7 +192,7 @@ struct LengthSummarizer(Summarizer, PlotOutput, Copyable, Movable):
 
 # ----- Assembled module: Collector + Summarizer + DefaultOutputter -----
 
-struct LengthModule(FastqcDataOutput, FastqcHtmlOutput, Copyable, Movable):
+struct LengthModule(FastqcDataOutput, FastqcHtmlOutput, ModuleReport, Copyable, Movable):
     """Module assembling LengthCollector + LengthSummarizer; exposes only data/text/HTML helpers."""
     var collector: LengthCollector
     var summarizer: LengthSummarizer
@@ -201,18 +203,18 @@ struct LengthModule(FastqcDataOutput, FastqcHtmlOutput, Copyable, Movable):
 
     fn to_data_text(self, ctx: SummaryContext) raises -> String:
         """FastQC-style data block text for this module."""
-        var body = self.summarizer.data_block_body_()
+        var body = self.summarizer.data_block_body()
         var g = self.summarizer.grade()
         var out = DefaultOutputter()
-        return out.wrap_data_block(self.summarizer.module_legend_(), g.grade, body)
+        return out.wrap_data_block(self.summarizer.module_legend(), g.grade, body)
 
     fn to_html(self) raises -> result_panel:
         var fig = self.summarizer.plot_result()
         var out = DefaultOutputter()
         return out.make_panel(
-            self.summarizer.panel_id_(),
+            self.summarizer.panel_id(),
             self.summarizer.grade().grade,
-            self.summarizer.module_legend_(),
+            self.summarizer.module_legend(),
             fig,
         )
 
@@ -220,6 +222,10 @@ struct LengthModule(FastqcDataOutput, FastqcHtmlOutput, Copyable, Movable):
         var panels = List[result_panel]()
         panels.append(self.to_html())
         return panels^
+
+    fn plot_result(self) raises -> PythonObject:
+        """Delegate to summarizer for plot; ModuleReport entry point."""
+        return self.summarizer.plot_result()
 
 
 

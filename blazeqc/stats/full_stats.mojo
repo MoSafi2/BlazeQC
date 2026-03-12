@@ -19,7 +19,6 @@ from blazeqc.html_maker import (
     html_template,
     format_length,
 )
-from blazeqc.stats.cg_content import CGCollector, CGSummarizer
 
 # ----- Report data (FastQC-style data file) -----
 # FullStats.write_data(file_name) writes ##BlazeQC, basic stats, then each module's write_module_data(f).
@@ -147,8 +146,7 @@ struct FullStats(Copyable):
         var bp_plots = self.bp_dist.plot(self.num_reads)
         plots.append(bp_plots[0])
         plots.append(bp_plots[1])
-        var cg_fig = self.cg_content.summarizer.plot_result()
-        plots.append(cg_fig)
+        plots.append(self.cg_content.plot_result())
         plots.append(self.len_dist.plot_result())
         var dup_plot_result = self.dup_reads.plot(Int(self.num_reads))
         plots.append(dup_plot_result[0])
@@ -244,8 +242,10 @@ struct FullStats(Copyable):
             var panel = cg_panels[i].copy()
             panels[panel.legand] = panel^
 
-        var sequence_length_distribution = self.len_dist.to_html()
-        panels[sequence_length_distribution.legand] = sequence_length_distribution^
+        var len_panels = self.len_dist.to_html_panels()
+        for i in range(len(len_panels)):
+            var panel = len_panels[i].copy()
+            panels[panel.legand] = panel^
 
         var dup_html = self.dup_reads.make_html(Int(self.num_reads))
         var sequence_duplication_levels = dup_html[0].copy()
