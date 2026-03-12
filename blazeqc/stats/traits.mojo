@@ -14,8 +14,10 @@ trait Collector(Copyable):
         ...
 
 
-trait Summarizer(Copyable):
-    """Summarization: prepare derived data and expose grades (pass/warn/fail)."""
+trait Summarizer(Copyable, PlotOutput):
+    """Main interface for summarization: prepare derived data and expose grades (pass/warn/fail).
+    Also provide different types of Output interfaces.
+    """
     fn summerize(mut self, ctx: SummaryContext) raises:
         ...
 
@@ -23,20 +25,22 @@ trait Summarizer(Copyable):
         ...
 
 
-trait TextOutput(Copyable):
-    """Output: FastQC-style data block text."""
-    fn to_data_text(self, ctx: SummaryContext) raises -> String:
-        ...
-
-
 trait PlotOutput(Copyable):
-    """Output: one or more plot figures (single-panel modules return list of length 1)."""
+    """Output: plot results."""
     fn plot_result(self) raises -> PythonObject:
         ...
 
 
-trait HtmlOutput(Copyable):
-    """Output: one or more result_panel for HTML report."""
+trait FastqcHtmlOutput(Copyable):
+    """Output: result_panel for HTML report."""
     fn to_html(self) raises -> result_panel:
         ...
+
+
+
+trait FastqcDataOutput(Copyable):
+    """Output: FastQC-style data block text."""
+    fn to_data_text(self, ctx: SummaryContext) raises -> String:
+        ...
+
 
