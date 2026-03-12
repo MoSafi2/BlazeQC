@@ -6,14 +6,12 @@ from python import Python, PythonObject
 from blazeseq import FastqRecord, RefRecord
 from blazeqc.stats.traits import (
     Collector,
-    SummaryContext,
-    GradeEntry,
     Summarizer,
     TextOutput,
     PlotOutput,
     HtmlOutput,
-    DefaultOutputter,
 )
+from blazeqc.stats.summary_utils import SummaryContext, GradeEntry, DefaultOutputter
 from blazeqc.helpers import tensor_to_numpy_1d, list_float64_to_numpy
 from blazeqc.html_maker import result_panel
 from blazeqc.limits import GC_SEQUENCE_WARN, GC_SEQUENCE_ERROR
@@ -256,9 +254,6 @@ struct CGModule(Collector, Summarizer, TextOutput, PlotOutput, HtmlOutput, Copya
         var panels = List[result_panel]()
         panels.append(self.to_html())
         return panels^
-
-
-comptime CGContent = CGModule
 
 
 

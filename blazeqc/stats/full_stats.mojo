@@ -4,9 +4,9 @@ from collections.dict import Dict
 from collections.list import List
 from python import Python, PythonObject
 from blazeseq import FastqRecord, RefRecord
-from blazeqc.stats.traits import SummaryContext
+from blazeqc.stats.summary_utils import SummaryContext
 from blazeqc.stats.basepair_distribution import BasepairDistribution
-from blazeqc.stats.cg_content import CGContent
+from blazeqc.stats.cg_content import CGModule
 from blazeqc.stats.duplication import DupReads
 from blazeqc.stats.length_distribution import LengthDistribution
 from blazeqc.stats.quality_distribution import QualityDistribution
@@ -30,7 +30,7 @@ struct FullStats(Copyable):
     var bp_dist: BasepairDistribution
     var len_dist: LengthDistribution
     var qu_dist: QualityDistribution
-    var cg_content: CGContent
+    var cg_content: CGModule
     var dup_reads: DupReads
     var tile_qual: PerTileQuality
     var adpt_cont: AdapterContent[3]
@@ -40,7 +40,7 @@ struct FullStats(Copyable):
         self.total_bases = 0
         self.len_dist = LengthDistribution()
         self.bp_dist = BasepairDistribution()
-        self.cg_content = CGContent()
+        self.cg_content = CGModule()
         self.qu_dist = QualityDistribution()
         self.dup_reads = DupReads()
         self.tile_qual = PerTileQuality()
@@ -145,7 +145,7 @@ struct FullStats(Copyable):
         var bp_plots = self.bp_dist.plot(self.num_reads)
         plots.append(bp_plots[0])
         plots.append(bp_plots[1])
-        var cg_fig = self.cg_content.to_plot()
+        var cg_fig = self.cg_content.plot_result()
         plots.append(cg_fig)
         plots.append(self.len_dist.plot())
         var dup_plot_result = self.dup_reads.plot(Int(self.num_reads))
