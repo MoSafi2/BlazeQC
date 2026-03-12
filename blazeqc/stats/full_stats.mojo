@@ -5,12 +5,12 @@ from collections.list import List
 from python import Python, PythonObject
 from blazeseq import FastqRecord, RefRecord
 from blazeqc.stats.summary_utils import SummaryContext
-from blazeqc.stats.basepair_distribution import BasepairDistribution
+from blazeqc.stats.basepair_distribution import BasepairModule
 from blazeqc.stats.cg_content import CGModule
-from blazeqc.stats.duplication import DupReads
+from blazeqc.stats.duplication import DupModule
 from blazeqc.stats.length_distribution import LengthModule
 from blazeqc.stats.quality_distribution import QualityModule
-from blazeqc.stats.tile_quality import PerTileQuality
+from blazeqc.stats.tile_quality import TileQualityModule
 from blazeqc.stats.adapter_content import AdapterContentModule
 from blazeqc.config import hash_list
 from blazeqc.html_maker import (
@@ -28,30 +28,30 @@ from blazeqc.html_maker import (
 struct FullStats(Copyable):
     var num_reads: Int64
     var total_bases: Int64
-    var bp_dist: BasepairDistribution
+    var bp_dist: BasepairModule
     var len_dist: LengthModule
     var qu_dist: QualityModule
     var cg_content: CGModule
-    var dup_reads: DupReads
-    var tile_qual: PerTileQuality
+    var dup_reads: DupModule
+    var tile_qual: TileQualityModule
     var adpt_cont: AdapterContentModule[3]
 
     fn __init__(out self) raises:
         self.num_reads = 0
         self.total_bases = 0
         self.len_dist = LengthModule()
-        self.bp_dist = BasepairDistribution()
+        self.bp_dist = BasepairModule()
         self.cg_content = CGModule()
         self.qu_dist = QualityModule()
-        self.dup_reads = DupReads()
-        self.tile_qual = PerTileQuality()
+        self.dup_reads = DupModule()
+        self.tile_qual = TileQualityModule()
         self.adpt_cont = AdapterContentModule[bits=3](hash_list(), 12)
 
     @always_inline
     fn tally(mut self, record: FastqRecord):
         self.num_reads += 1
         self.total_bases += len(record)
-        self.bp_dist.tally_read(record)
+        self.bp_dist.collector.tally_read(record)
         self.len_dist.collector.tally_read(record)
         self.cg_content.collector.tally_read(record)  # Almost Free
         self.dup_reads.tally_read(record)
@@ -63,7 +63,7 @@ struct FullStats(Copyable):
     fn tally(mut self, record: RefRecord):
         self.num_reads += 1
         self.total_bases += len(record)
-        self.bp_dist.tally_read(record)
+        self.bp_dist.collector.tally_read(record)
         self.len_dist.collector.tally_read(record)
         self.cg_content.collector.tally_read(record)
         self.dup_reads.tally_read(record)
@@ -82,11 +82,11 @@ struct FullStats(Copyable):
         var total_bases = format_length(Float64(self.total_bases))
 
         var lengths: String
-        if self.bp_dist.max_length == self.bp_dist.min_length:
-            lengths = String(self.bp_dist.max_length)
+        if self.bp_dist.collector.max_length == self.bp_dist.collector.min_length:
+            lengths = String(self.bp_dist.collector.max_length)
         else:
             lengths = "{}-{}".format(
-                self.bp_dist.min_length, self.bp_dist.max_length
+                self.bp_dist.collector.min_length, self.bp_dist.collector.max_length
             )
 
         var table_template = """
@@ -143,17 +143,16 @@ struct FullStats(Copyable):
     fn plot(mut self) raises -> List[PythonObject]:
         var plots = List[PythonObject]()
 
-        var bp_plots = self.bp_dist.plot(self.num_reads)
+        var bp_plots = self.bp_dist.plot_result()
         plots.append(bp_plots[0])
         plots.append(bp_plots[1])
         plots.append(self.cg_content.plot_result())
         plots.append(self.len_dist.plot_result())
-        var dup_plot_result = self.dup_reads.plot(Int(self.num_reads))
-        plots.append(dup_plot_result[0])
+        plots.append(self.dup_reads.summarizer_dup.plot_result())
         var qu_plots = self.qu_dist.plot()
         plots.append(qu_plots[0])
         plots.append(qu_plots[1])
-        plots.append(self.tile_qual.plot())
+        plots.append(self.tile_qual.plot_result())
         plots.append(self.adpt_cont.plot(self.num_reads))
 
         return plots^
@@ -165,13 +164,13 @@ struct FullStats(Copyable):
         self.qu_dist.summarizer_seq.feed(self.qu_dist.collector)
         self.qu_dist.summarizer_base.summerize(ctx)
         self.qu_dist.summarizer_seq.summerize(ctx)
-        self.tile_qual.prepare_data()
-        self.bp_dist.prepare_data(self.num_reads)
+        self.tile_qual.prepare_summarizers(ctx)
+        self.bp_dist.prepare_summarizers(ctx)
         self.cg_content.summarizer.feed(self.cg_content.collector)
         self.cg_content.summarizer.summerize(ctx)
         self.len_dist.summarizer.feed_(self.len_dist.collector)
         self.len_dist.summarizer.summerize(ctx)
-        self.dup_reads.prepare_data(Int(self.num_reads))
+        self.dup_reads.prepare_summarizers(ctx)
         self.adpt_cont.summarizer.feed(self.adpt_cont.collector)
         self.adpt_cont.summarizer.summerize(ctx)
 
@@ -190,11 +189,11 @@ struct FullStats(Copyable):
             var schema = self.qu_dist._guess_schema()
             var total_bases_str = format_length(Float64(self.total_bases))
             var lengths: String
-            if self.bp_dist.max_length == self.bp_dist.min_length:
-                lengths = String(self.bp_dist.max_length)
+            if self.bp_dist.collector.max_length == self.bp_dist.collector.min_length:
+                lengths = String(self.bp_dist.collector.max_length)
             else:
                 lengths = "{}-{}".format(
-                    self.bp_dist.min_length, self.bp_dist.max_length
+                    self.bp_dist.collector.min_length, self.bp_dist.collector.max_length
                 )
             var filename_display = file_name
             if file_name.find("/") >= 0:
@@ -214,11 +213,11 @@ struct FullStats(Copyable):
             # Module blocks in panel order (each returns its block text)
             var ctx = SummaryContext(self.num_reads, self.total_bases, file_name)
             f.write(self.qu_dist.to_data_text(ctx))
-            f.write(self.tile_qual.get_module_data())
-            f.write(self.bp_dist.get_module_data(self.num_reads))
+            f.write(self.tile_qual.to_data_text(ctx))
+            f.write(self.bp_dist.to_data_text(ctx))
             f.write(self.cg_content.to_data_text(ctx))
             f.write(self.len_dist.to_data_text(ctx))
-            f.write(self.dup_reads.get_module_data(Int(self.num_reads)))
+            f.write(self.dup_reads.to_data_text(ctx))
             f.write(self.adpt_cont.to_data_text(ctx))
 
     fn build_panels(mut self) raises -> Dict[String, result_panel]:
@@ -231,14 +230,15 @@ struct FullStats(Copyable):
             var panel = qu_panels[i].copy()
             panels[panel.legand] = panel^
 
-        var tile_quality = self.tile_qual.make_html()
-        panels[tile_quality.legand] = tile_quality^
+        var tile_panels = self.tile_qual.to_html_panels()
+        for i in range(len(tile_panels)):
+            var panel = tile_panels[i].copy()
+            panels[panel.legand] = panel^
 
-        var bp_html = self.bp_dist.make_html(self.num_reads)
-        var base_pair_N_percentage = bp_html[0].copy()
-        var base_pair_distribution = bp_html[1].copy()
-        panels[base_pair_distribution.legand] = base_pair_distribution^
-        panels[base_pair_N_percentage.legand] = base_pair_N_percentage^
+        var bp_panels = self.bp_dist.to_html_panels()
+        for i in range(len(bp_panels)):
+            var panel = bp_panels[i].copy()
+            panels[panel.legand] = panel^
 
         var cg_panels = self.cg_content.to_html_panels()
         for i in range(len(cg_panels)):
@@ -250,11 +250,10 @@ struct FullStats(Copyable):
             var panel = len_panels[i].copy()
             panels[panel.legand] = panel^
 
-        var dup_html = self.dup_reads.make_html(Int(self.num_reads))
-        var sequence_duplication_levels = dup_html[0].copy()
-        var overrepresented_sequences = dup_html[1].copy()
-        panels[sequence_duplication_levels.legand] = sequence_duplication_levels^
-        panels[overrepresented_sequences.legand] = overrepresented_sequences^
+        var dup_panels = self.dup_reads.to_html_panels()
+        for i in range(len(dup_panels)):
+            var panel = dup_panels[i].copy()
+            panels[panel.legand] = panel^
 
         var adapter_panels = self.adpt_cont.to_html_panels()
         for i in range(len(adapter_panels)):

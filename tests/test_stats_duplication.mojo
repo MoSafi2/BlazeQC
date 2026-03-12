@@ -1,41 +1,42 @@
 """Unit tests for blazeqc.stats.duplication and over_represented (pure Mojo)."""
 
 from blazeseq import FastqRecord
-from blazeqc.stats.duplication import DupReads
+from blazeqc.stats.duplication import DupCollector, DupModule, _correct_values
 from blazeqc.stats.over_represented import OverRepresentedSequence
+from blazeqc.stats.summary_utils import SummaryContext
 from testing import assert_equal, assert_true, TestSuite
 
 
-# ----- 1. DupReads — initialisation -----
+# ----- 1. DupCollector — initialisation -----
 
 
 def test_dup_reads_init_n_zero():
-    var dr = DupReads()
+    var dr = DupCollector()
     assert_equal(dr.n, 0)
 
 
 def test_dup_reads_init_unique_reads_zero():
-    var dr = DupReads()
+    var dr = DupCollector()
     assert_equal(dr.unique_reads, 0)
 
 
 def test_dup_reads_init_count_at_max_zero():
-    var dr = DupReads()
+    var dr = DupCollector()
     assert_equal(dr.count_at_max, 0)
 
 
-# ----- 2. DupReads — tally_read -----
+# ----- 2. DupCollector — tally_read -----
 
 
 def test_dup_reads_tally_n_increments():
-    var dr = DupReads()
+    var dr = DupCollector()
     var rec = FastqRecord("r1", "ACGT", "IIII")
     dr.tally_read(rec)
     assert_equal(dr.n, 1)
 
 
 def test_dup_reads_tally_n_increments_on_duplicate():
-    var dr = DupReads()
+    var dr = DupCollector()
     var rec = FastqRecord("r1", "ACGT", "IIII")
     dr.tally_read(rec)
     dr.tally_read(rec)
@@ -43,15 +44,14 @@ def test_dup_reads_tally_n_increments_on_duplicate():
 
 
 def test_dup_reads_tally_unique_read_increments_unique_reads():
-    var dr = DupReads()
+    var dr = DupCollector()
     var rec = FastqRecord("r1", "ACGT", "IIII")
     dr.tally_read(rec)
     assert_equal(dr.unique_reads, 1)
 
 
 def test_dup_reads_tally_duplicate_does_not_increment_unique_reads():
-    # Same sequence twice → unique_reads stays 1
-    var dr = DupReads()
+    var dr = DupCollector()
     var rec = FastqRecord("r1", "ACGT", "IIII")
     dr.tally_read(rec)
     dr.tally_read(rec)
@@ -59,7 +59,7 @@ def test_dup_reads_tally_duplicate_does_not_increment_unique_reads():
 
 
 def test_dup_reads_tally_two_different_reads():
-    var dr = DupReads()
+    var dr = DupCollector()
     var rec1 = FastqRecord("r1", "ACGT", "IIII")
     var rec2 = FastqRecord("r2", "TTTT", "IIII")
     dr.tally_read(rec1)
@@ -69,16 +69,14 @@ def test_dup_reads_tally_two_different_reads():
 
 
 def test_dup_reads_tally_count_at_max_updated():
-    # count_at_max tracks n at the point the unique read was added
-    var dr = DupReads()
+    var dr = DupCollector()
     var rec = FastqRecord("r1", "ACGT", "IIII")
     dr.tally_read(rec)
-    # count_at_max should equal n (1) after the first unique read
     assert_equal(dr.count_at_max, 1)
 
 
 def test_dup_reads_tally_many_unique_reads():
-    var dr = DupReads()
+    var dr = DupCollector()
     for i in range(10):
         var rec = FastqRecord("r" + String(i), "ACGT" + String(i), "IIIII")
         dr.tally_read(rec)
@@ -86,25 +84,21 @@ def test_dup_reads_tally_many_unique_reads():
     assert_equal(dr.n, 10)
 
 
-# ----- 3. DupReads.correct_values (static method) -----
+# ----- 3. _correct_values (free function) -----
 
 
 def test_correct_values_count_at_max_equals_total():
-    # When count_at_max == total_count → return count_at_level unchanged
-    var result = DupReads.correct_values(2, 5, 100, 100)
+    var result = _correct_values(2, 5, 100, 100)
     assert_equal(result, 5.0)
 
 
 def test_correct_values_remaining_less_than_count_at_max():
-    # When total_count - count_at_level < count_at_max → return count_at_level
-    # 50 - 40 = 10 < 20 → return 40
-    var result = DupReads.correct_values(2, 40, 20, 50)
+    var result = _correct_values(2, 40, 20, 50)
     assert_equal(result, 40.0)
 
 
 def test_correct_values_returns_float64():
-    # Just verify it runs and returns a non-negative value in the normal path
-    var result = DupReads.correct_values(1, 1, 50, 1000)
+    var result = _correct_values(1, 1, 50, 1000)
     assert_true(result > 0.0)
 
 
@@ -135,37 +129,43 @@ def test_over_repr_zero_percentage():
     assert_equal(ors.percentage, 0.0)
 
 
-# ----- _get_status_duplication (pass/warn/fail) -----
+# ----- Duplication status (pass/warn/fail) via DupModule -----
 # DUPLICATION_WARN=70, DUPLICATION_ERROR=50. Percent remaining after dedup.
 
 
 def test_dup_status_pass():
-    var dr = DupReads()
+    var mod = DupModule()
     for i in range(20):
         var rec = FastqRecord("r" + String(i), "ACGTACGTACGT" + String(i), "IIIIIIIIIIII")
-        dr.tally_read(rec)
-    assert_equal(dr._get_status_duplication(20), "pass")
+        mod.tally_read(rec)
+    var ctx = SummaryContext(20, 240, "test")
+    mod.prepare_summarizers(ctx)
+    assert_equal(mod.summarizer_dup.grade().grade, "pass")
 
 
 def test_dup_status_warn():
-    var dr = DupReads()
+    var mod = DupModule()
     for i in range(20):
         var rec = FastqRecord("r" + String(i), "ACGTACGTACGT" + String(i), "IIIIIIIIIIII")
-        dr.tally_read(rec)
+        mod.tally_read(rec)
     for i in range(20, 60):
         for _ in range(2):
             var rec = FastqRecord("r" + String(i), "ACGTACGTACGT" + String(i), "IIIIIIIIIIII")
-            dr.tally_read(rec)
-    assert_equal(dr._get_status_duplication(100), "warn")
+            mod.tally_read(rec)
+    var ctx = SummaryContext(100, 1200, "test")
+    mod.prepare_summarizers(ctx)
+    assert_equal(mod.summarizer_dup.grade().grade, "warn")
 
 
 def test_dup_status_fail():
-    var dr = DupReads()
+    var mod = DupModule()
     for i in range(50):
         for _ in range(4):
             var rec = FastqRecord("r" + String(i), "ACGTACGTACGT" + String(i), "IIIIIIIIIIII")
-            dr.tally_read(rec)
-    assert_equal(dr._get_status_duplication(200), "fail")
+            mod.tally_read(rec)
+    var ctx = SummaryContext(200, 2400, "test")
+    mod.prepare_summarizers(ctx)
+    assert_equal(mod.summarizer_dup.grade().grade, "fail")
 
 
 def main():

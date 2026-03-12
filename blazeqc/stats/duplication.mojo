@@ -1,26 +1,80 @@
-"""Duplication and over-represented sequences (split from stats_.mojo)."""
+"""Duplication and over-represented sequences: Collector + two Summarizers + DupModule."""
 
 from collections.dict import Dict
 from collections.list import List
 from python import Python, PythonObject
 from blazeseq import FastqRecord, RefRecord
-from blazeqc.stats.traits import Collector
+from blazeqc.stats.traits import Collector, Summarizer, PlotOutput
+from blazeqc.stats.summary_utils import SummaryContext, GradeEntry, DefaultOutputter
 from blazeqc.stats.over_represented import OverRepresentedSequence
 from blazeqc.helpers import list_float64_to_numpy, encode_img_b64
 from blazeqc.html_maker import result_panel, _make_row, _make_table
 from blazeqc.limits import DUPLICATION_WARN, DUPLICATION_ERROR
 
 
-struct DupReads(Collector, Copyable, Movable):
+comptime MAX_READS = 100_000
+
+# ----- Helper: correct_values (from original DupReads) -----
+
+fn _correct_values(
+    dup_level: Int, count_at_level: Int, count_at_max: Int, total_count: Int
+) -> Float64:
+    if count_at_max == total_count:
+        return count_at_level
+    if total_count - count_at_level < count_at_max:
+        return count_at_level
+    var pNotSeeingAtLimit: Float64 = 1
+    var limitOfCaring = Float64(1) - (
+        count_at_level / (count_at_level + 0.01)
+    )
+    for i in range(count_at_max):
+        pNotSeeingAtLimit *= ((total_count - i) - dup_level) / (
+            total_count - i
+        )
+        if pNotSeeingAtLimit < limitOfCaring:
+            pNotSeeingAtLimit = 0
+            break
+    var pSeeingAtLimit: Float64 = 1 - pNotSeeingAtLimit
+    return count_at_level / pSeeingAtLimit
+
+
+fn _dup_slot(dup_level: Int) -> Int:
+    var dup_slot = min(max(dup_level - 1, 0), 15)
+    if dup_slot > 9999 or dup_slot < 0:
+        return 15
+    if dup_slot > 4999:
+        return 14
+    if dup_slot > 999:
+        return 13
+    if dup_slot > 499:
+        return 12
+    if dup_slot > 99:
+        return 11
+    if dup_slot > 49:
+        return 10
+    if dup_slot > 9:
+        return 9
+    return dup_slot
+
+
+fn cmp_over_repr(
+    a: OverRepresentedSequence,
+    b: OverRepresentedSequence,
+) capturing -> Bool:
+    if a.percentage > b.percentage:
+        return True
+    elif a.percentage < b.percentage:
+        return False
+    return False
+
+
+# ----- Collector: tally only -----
+
+struct DupCollector(Collector, Copyable, Movable):
     var unique_dict: Dict[String, Int]
     var unique_reads: Int
     var count_at_max: Int
     var n: Int
-    var corrected_counts: Dict[Int, Float64]
-    var _cache_dup_percentages: List[Float64]
-    var _cache_overrepresented: List[OverRepresentedSequence]
-    var _cache_ready: Bool
-    comptime MAX_READS = 100_000
 
     fn __init__(out self):
         self.unique_dict = Dict[String, Int](
@@ -29,12 +83,7 @@ struct DupReads(Collector, Copyable, Movable):
         self.unique_reads = 0
         self.count_at_max = 0
         self.n = 0
-        self.corrected_counts = Dict[Int, Float64]()
-        self._cache_dup_percentages = List[Float64]()
-        self._cache_overrepresented = List[OverRepresentedSequence]()
-        self._cache_ready = False
 
-    # TODO: Check if the Stringslice to String Conversion is right
     fn tally_read(mut self, record: FastqRecord):
         self.n += 1
         var read_len = min(len(record), 50)
@@ -50,12 +99,10 @@ struct DupReads(Collector, Copyable, Movable):
             except error:
                 print(error)
                 pass
-
-        if self.unique_reads <= self.MAX_READS:
+        if self.unique_reads <= MAX_READS:
             self.unique_dict[s] = 1
             self.unique_reads += 1
-
-            if self.unique_reads <= self.MAX_READS:
+            if self.unique_reads <= MAX_READS:
                 self.count_at_max = self.n
         else:
             return
@@ -75,114 +122,143 @@ struct DupReads(Collector, Copyable, Movable):
             except error:
                 print(error)
                 pass
-
-        if self.unique_reads <= self.MAX_READS:
+        if self.unique_reads <= MAX_READS:
             self.unique_dict[s] = 1
             self.unique_reads += 1
-
-            if self.unique_reads <= self.MAX_READS:
+            if self.unique_reads <= MAX_READS:
                 self.count_at_max = self.n
         else:
             return
 
-    fn predict_reads(mut self):
-        # Construct Duplication levels dict
-        var dup_dict = Dict[Int, Int]()
-        for entry in self.unique_dict.items():
-            if Int(entry.value) in dup_dict:
-                try:
-                    dup_dict[Int(entry.value)] += 1
-                except error:
-                    print(error)
-            else:
-                dup_dict[Int(entry.value)] = 1
 
-        # Correct reads levels
-        var corrected_reads = Dict[Int, Float64]()
-        for entry in dup_dict:
+# ----- Prepared data (computed once from collector) -----
+
+fn _compute_corrected_counts(collector: DupCollector) -> Dict[Int, Float64]:
+    var dup_dict = Dict[Int, Int]()
+    for entry in collector.unique_dict.items():
+        if Int(entry.value) in dup_dict:
             try:
-                var level = entry
-                var count = dup_dict[level]
-                var corrected_count = self.correct_values(
-                    level, count, self.count_at_max, self.n
-                )
-                corrected_reads[level] = corrected_count
-            except:
-                print("Error")
+                dup_dict[Int(entry.value)] += 1
+            except error:
+                print(error)
+        else:
+            dup_dict[Int(entry.value)] = 1
+    var corrected_reads = Dict[Int, Float64]()
+    for entry in dup_dict:
+        try:
+            var level = entry
+            var count = dup_dict[level]
+            var corrected_count = _correct_values(
+                level, count, collector.count_at_max, collector.n
+            )
+            corrected_reads[level] = corrected_count
+        except:
+            print("Error")
+    return corrected_reads^
 
-        self.corrected_counts = corrected_reads^
 
-    @staticmethod
-    fn correct_values(
-        dup_level: Int, count_at_level: Int, count_at_max: Int, total_count: Int
-    ) -> Float64:
-        if count_at_max == total_count:
-            return count_at_level
+fn _percent_remaining_after_dedup(
+    corrected_counts: Dict[Int, Float64], n: Int
+) -> Float64:
+    var dedup_total: Float64 = 0
+    var raw_total: Float64 = 0
+    for entry in corrected_counts.items():
+        dedup_total += entry.value
+        raw_total += entry.value * Float64(entry.key)
+    if raw_total <= 0:
+        return 100.0
+    return (dedup_total / raw_total) * 100.0
 
-        if total_count - count_at_level < count_at_max:
-            return count_at_level
 
-        var pNotSeeingAtLimit: Float64 = 1
-        var limitOfCaring = Float64(1) - (
-            count_at_level / (count_at_level + 0.01)
+struct DupPreparedData(Copyable, Movable):
+    var dup_percentages: List[Float64]
+    var dup_grade: String
+    var overrepresented: List[OverRepresentedSequence]
+
+    fn __init__(out self):
+        self.dup_percentages = List[Float64]()
+        self.dup_grade = ""
+        self.overrepresented = List[OverRepresentedSequence]()
+
+fn _prepare_dup_data(
+    collector: DupCollector, total_reads: Int
+) -> DupPreparedData:
+    var corrected_counts = _compute_corrected_counts(collector)
+    var total_percentages = List[Float64](capacity=16)
+    for _ in range(16):
+        total_percentages.append(0)
+    for entry in corrected_counts.items():
+        var count = entry.value
+        var dup_level = entry.key
+        total_percentages[_dup_slot(dup_level)] += count * dup_level
+    var result = DupPreparedData()
+    for i in range(16):
+        result.dup_percentages.append(
+            (total_percentages[i] / Float64(total_reads)) * Float64(100)
         )
+    var pct = _percent_remaining_after_dedup(corrected_counts, collector.n)
+    if pct < DUPLICATION_ERROR:
+        result.dup_grade = "fail"
+    elif pct < DUPLICATION_WARN:
+        result.dup_grade = "warn"
+    else:
+        result.dup_grade = "pass"
 
-        for i in range(count_at_max):
-            pNotSeeingAtLimit *= ((total_count - i) - dup_level) / (
-                total_count - i
+    for key in collector.unique_dict.items():
+        var seq_pct = (Float64(key.value) / Float64(collector.n)) * 100.0
+        if seq_pct > 0.1:
+            result.overrepresented.append(
+                OverRepresentedSequence(
+                    String(key.key), key.value, seq_pct, String("No Hit")
+                )
             )
+    sort[cmp_fn=cmp_over_repr](result.overrepresented)
+    return result^
 
-            if pNotSeeingAtLimit < limitOfCaring:
-                pNotSeeingAtLimit = 0
-                break
 
-        var pSeeingAtLimit: Float64 = 1 - pNotSeeingAtLimit
-        var trueCount = count_at_level / pSeeingAtLimit
-        return trueCount
+# ----- Summarizer: Duplicate Sequences -----
 
-    fn plot(
-        mut self, total_reads: Int
-    ) raises -> Tuple[PythonObject, List[OverRepresentedSequence]]:
-        ###################################################################
-        ###                     Duplicate Reads                         ###
-        ###################################################################
-        # Correct if we didn't hit the number of unique reads, thus count_at_max stays at 0:
-        self.predict_reads()
-        var total_percentages = List[Float64](capacity=16)
-        for _ in range(16):
-            total_percentages.append(0)
-        var dedup_total: Float64 = 0
-        var raw_total: Float64 = 0
-        for entry in self.corrected_counts.items():
-            var count = entry.value
-            var dup_level = entry.key
-            dedup_total += count
-            raw_total += count * dup_level
-            var dup_slot = min(max(dup_level - 1, 0), 15)
-            # Handle edge cases for duplication levels
-            if dup_slot > 9999 or dup_slot < 0:
-                dup_slot = 15
-            elif dup_slot > 4999:
-                dup_slot = 14
-            elif dup_slot > 999:
-                dup_slot = 13
-            elif dup_slot > 499:
-                dup_slot = 12
-            elif dup_slot > 99:
-                dup_slot = 11
-            elif dup_slot > 49:
-                dup_slot = 10
-            elif dup_slot > 9:
-                dup_slot = 9
-            total_percentages[dup_slot] += count * dup_level
+struct DuplicateSequencesSummarizer(Summarizer, PlotOutput, Copyable, Movable):
+    var _cache_dup_percentages: List[Float64]
+    var _cache_grade: String
+    var _cache_ready: Bool
 
+    fn __init__(out self):
+        self._cache_dup_percentages = List[Float64]()
+        self._cache_grade = ""
+        self._cache_ready = False
+
+    fn feed_prepared(mut self, dup_percentages: List[Float64], grade: String):
+        self._cache_dup_percentages = dup_percentages.copy()
+        self._cache_grade = grade
+        self._cache_ready = True
+
+    fn summerize(mut self, ctx: SummaryContext) raises:
+        pass
+
+    fn grade(self) raises -> GradeEntry:
+        return GradeEntry("Duplicate Sequences", self._cache_grade)
+
+    fn data_block_body(self) raises -> String:
+        if not self._cache_ready:
+            return ""
+        var out = "#Duplication Level\tPercentage of total\n"
+        var tick_labels = List[String]()
+        tick_labels.append("1"); tick_labels.append("2"); tick_labels.append("3"); tick_labels.append("4"); tick_labels.append("5"); tick_labels.append("6"); tick_labels.append("7"); tick_labels.append("8"); tick_labels.append("9")
+        tick_labels.append(">10"); tick_labels.append(">50"); tick_labels.append(">100"); tick_labels.append(">500"); tick_labels.append(">1k"); tick_labels.append(">5k"); tick_labels.append(">10k+")
+        for i in range(len(self._cache_dup_percentages)):
+            out += "{}\t{}\n".format(tick_labels[i], self._cache_dup_percentages[i])
+        return out
+
+    fn module_legend(self) -> String:
+        return "Duplicate Sequences"
+
+    fn panel_id(self) -> String:
+        return "dup_reads"
+
+    fn plot_result(self) raises -> PythonObject:
         var plt = Python.import_module("matplotlib.pyplot")
-        var new_arr = List[Float64](capacity=len(total_percentages))
-        for i in range(len(total_percentages)):
-            new_arr.append(
-                (total_percentages[i] / Float64(total_reads)) * Float64(100)
-            )
-        var final_arr = list_float64_to_numpy(new_arr)
+        var final_arr = list_float64_to_numpy(self._cache_dup_percentages)
         var f = plt.subplots()
         var fig = f[0]
         var ax = f[1]
@@ -196,172 +272,115 @@ struct DupReads(Collector, Copyable, Movable):
         ax.set_xticklabels(tick_labels)
         ax.set_xlabel("Sequence Duplication Level")
         ax.set_title("Sequence duplication levels")
-        # ax.set_ylim(0, 100)
+        return fig
 
-        ################################################################
-        ####               Over-Represented Sequences                ###
-        ################################################################
 
-        # TODO: Check also those over-representing stuff against the contaimination list.
-        var overrepresented_seqs = List[OverRepresentedSequence]()
-        for key in self.unique_dict.items():
-            var seq_precent = (Float64(key.value) / Float64(self.n)) * 100.0
-            if seq_precent > 0.1:
-                overrepresented_seqs.append(
-                    OverRepresentedSequence(
-                        String(key.key), key.value, seq_precent, String("No Hit")
-                    )
-                )
+# ----- Summarizer: Overrepresented Sequences (table panel) -----
 
-        sort[cmp_fn=cmp_over_repr](overrepresented_seqs)
+struct OverrepresentedSequencesSummarizer(Summarizer, PlotOutput, Copyable, Movable):
+    var _cache_overrepresented: List[OverRepresentedSequence]
+    var _cache_ready: Bool
 
-        return (fig^, overrepresented_seqs^)
+    fn __init__(out self):
+        self._cache_overrepresented = List[OverRepresentedSequence]()
+        self._cache_ready = False
 
-    fn _percent_remaining_after_dedup(mut self, total_reads: Int) -> Float64:
-        """Percentage of library remaining after deduplication (FastQC metric)."""
-        self.predict_reads()
-        var dedup_total: Float64 = 0
-        var raw_total: Float64 = 0
-        for entry in self.corrected_counts.items():
-            dedup_total += entry.value
-            raw_total += entry.value * Float64(entry.key)
-        if raw_total <= 0:
-            return 100.0
-        return (dedup_total / raw_total) * 100.0
-
-    fn prepare_data(mut self, total_reads: Int):
-        """Compute corrected duplication percentages and overrepresented list; store in cache."""
-        self.predict_reads()
-        var total_percentages = List[Float64](capacity=16)
-        for _ in range(16):
-            total_percentages.append(0)
-        for entry in self.corrected_counts.items():
-            var count = entry.value
-            var dup_level = entry.key
-            var dup_slot = min(max(dup_level - 1, 0), 15)
-            if dup_slot > 9999 or dup_slot < 0:
-                dup_slot = 15
-            elif dup_slot > 4999:
-                dup_slot = 14
-            elif dup_slot > 999:
-                dup_slot = 13
-            elif dup_slot > 499:
-                dup_slot = 12
-            elif dup_slot > 99:
-                dup_slot = 11
-            elif dup_slot > 49:
-                dup_slot = 10
-            elif dup_slot > 9:
-                dup_slot = 9
-            total_percentages[dup_slot] += count * dup_level
-
-        self._cache_dup_percentages = List[Float64](capacity=16)
-        for i in range(16):
-            self._cache_dup_percentages.append(
-                (total_percentages[i] / Float64(total_reads)) * Float64(100)
-            )
-
-        var overrepresented_seqs = List[OverRepresentedSequence]()
-        for key in self.unique_dict.items():
-            var seq_precent = (Float64(key.value) / Float64(self.n)) * 100.0
-            if seq_precent > 0.1:
-                overrepresented_seqs.append(
-                    OverRepresentedSequence(
-                        String(key.key), key.value, seq_precent, String("No Hit")
-                    )
-                )
-        sort[cmp_fn=cmp_over_repr](overrepresented_seqs)
-        self._cache_overrepresented = overrepresented_seqs^
+    fn feed_prepared(mut self, overrepresented: List[OverRepresentedSequence]):
+        self._cache_overrepresented = overrepresented.copy()
         self._cache_ready = True
 
-    fn get_module_data(mut self, total_reads: Int) -> String:
-        """Return FastQC-style block text for Duplicate Sequences and Overrepresented Sequences from cache."""
+    fn summerize(mut self, ctx: SummaryContext) raises:
+        pass
+
+    fn grade(self) raises -> GradeEntry:
+        return GradeEntry("Overrepresented Sequences", "pass")
+
+    fn data_block_body(self) raises -> String:
         if not self._cache_ready:
             return ""
-        var out = ""
-        out += ">>Duplicate Sequences\t{}\n".format(self._get_status_duplication(total_reads))
-        out += "#Duplication Level\tPercentage of total\n"
-        var tick_labels = List[String]()
-        tick_labels.append("1"); tick_labels.append("2"); tick_labels.append("3"); tick_labels.append("4"); tick_labels.append("5"); tick_labels.append("6"); tick_labels.append("7"); tick_labels.append("8"); tick_labels.append("9")
-        tick_labels.append(">10"); tick_labels.append(">50"); tick_labels.append(">100"); tick_labels.append(">500"); tick_labels.append(">1k"); tick_labels.append(">5k"); tick_labels.append(">10k+")
-        for i in range(len(self._cache_dup_percentages)):
-            out += "{}\t{}\n".format(tick_labels[i], self._cache_dup_percentages[i])
-        out += ">>END_MODULE\n"
-        out += ">>Overrepresented sequences\tpass\n"
-        out += "#Sequence\tCount\tPercentage\tPossible Source\n"
+        var out = "#Sequence\tCount\tPercentage\tPossible Source\n"
         for entry in self._cache_overrepresented:
             out += "{}\t{}\t{}\t{}\n".format(entry.seq, entry.count, entry.percentage, entry.hit)
-        out += ">>END_MODULE\n"
         return out
 
-    fn data_plot(mut self, total_reads: Int) raises -> Tuple[PythonObject, List[OverRepresentedSequence]]:
-        """Plot from cache when ready; otherwise delegate to plot()."""
-        if self._cache_ready:
-            var plt = Python.import_module("matplotlib.pyplot")
-            var final_arr = list_float64_to_numpy(self._cache_dup_percentages)
-            var f = plt.subplots()
-            var fig = f[0]
-            var ax = f[1]
-            ax.plot(final_arr)
-            var tick_positions = Python.list(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15)
-            ax.set_xticks(tick_positions)
-            var tick_labels = Python.list(
-                "1", "2", "3", "4", "5", "6", "7", "8", "9",
-                ">10", ">50", ">100", ">500", ">1k", ">5k", ">10k+",
-            )
-            ax.set_xticklabels(tick_labels)
-            ax.set_xlabel("Sequence Duplication Level")
-            ax.set_title("Sequence duplication levels")
-            return (fig^, self._cache_overrepresented.copy())
-        return self.plot(total_reads)
+    fn module_legend(self) -> String:
+        return "Overrepresented Sequences"
 
-    fn _get_status_duplication(mut self, total_reads: Int) -> String:
-        var pct = self._percent_remaining_after_dedup(total_reads)
-        if pct < DUPLICATION_ERROR:
-            return "fail"
-        if pct < DUPLICATION_WARN:
-            return "warn"
-        return "pass"
+    fn panel_id(self) -> String:
+        return "over_represented_seqs"
 
-    fn make_html(
-        mut self, total_reads: Int
-    ) raises -> Tuple[result_panel, result_panel]:
-        var plot_result = self.data_plot(total_reads)
-        var fig = plot_result[0]
-        var encoded_fig1 = encode_img_b64(fig)
-        var result_1 = result_panel(
-            "dup_reads",
-            self._get_status_duplication(total_reads),
-            "Duplicate Sequences",
-            encoded_fig1,
-        )
+    fn plot_result(self) raises -> PythonObject:
+        return Python.evaluate("None")
 
+    fn table_html(self) raises -> String:
         var rows: String = ""
-        for entry in plot_result[1]:
-            var row = _make_row(
+        for entry in self._cache_overrepresented:
+            rows += _make_row(
                 entry.seq, entry.count, entry.percentage, entry.hit
             )
-            rows += row
-        var over_repr_table = _make_table(rows)
+        return _make_table(rows)
 
-        var result_2 = result_panel(
-            "over_represented_seqs",
-            "pass",
-            "Overrepresented Sequences",
-            over_repr_table,
-            panel_type="table",
+
+# ----- Assembled module -----
+
+struct DupModule(Copyable, Movable):
+    var collector: DupCollector
+    var summarizer_dup: DuplicateSequencesSummarizer
+    var summarizer_overrepr: OverrepresentedSequencesSummarizer
+
+    fn __init__(out self):
+        self.collector = DupCollector()
+        self.summarizer_dup = DuplicateSequencesSummarizer()
+        self.summarizer_overrepr = OverrepresentedSequencesSummarizer()
+
+    fn tally_read(mut self, record: FastqRecord):
+        self.collector.tally_read(record)
+
+    fn tally_read(mut self, record: RefRecord):
+        self.collector.tally_read(record)
+
+    fn prepare_summarizers(mut self, ctx: SummaryContext) raises:
+        var total_reads = Int(ctx.num_reads)
+        var prepared = _prepare_dup_data(self.collector, total_reads)
+        self.summarizer_dup.feed_prepared(
+            prepared.dup_percentages, prepared.dup_grade
+        )
+        self.summarizer_dup.summerize(ctx)
+        self.summarizer_overrepr.feed_prepared(prepared.overrepresented)
+        self.summarizer_overrepr.summerize(ctx)
+
+    fn to_data_text(self, ctx: SummaryContext) raises -> String:
+        var out = DefaultOutputter()
+        var body_dup = self.summarizer_dup.data_block_body()
+        var g_dup = self.summarizer_dup.grade()
+        var body_over = self.summarizer_overrepr.data_block_body()
+        var g_over = self.summarizer_overrepr.grade()
+        return out.wrap_data_block(
+            self.summarizer_dup.module_legend(), g_dup.grade, body_dup
+        ) + out.wrap_data_block(
+            "Overrepresented sequences", g_over.grade, body_over
         )
 
-        return (result_1^, result_2^)
-
-
-fn cmp_over_repr(
-    a: OverRepresentedSequence,
-    b: OverRepresentedSequence,
-) capturing -> Bool:
-    if a.percentage > b.percentage:
-        return True
-    elif a.percentage < b.percentage:
-        return False
-    else:
-        return False
+    fn to_html_panels(self) raises -> List[result_panel]:
+        var panels = List[result_panel]()
+        var out = DefaultOutputter()
+        var fig = self.summarizer_dup.plot_result()
+        panels.append(
+            out.make_panel(
+                self.summarizer_dup.panel_id(),
+                self.summarizer_dup.grade().grade,
+                self.summarizer_dup.module_legend(),
+                fig,
+            )
+        )
+        var table_html = self.summarizer_overrepr.table_html()
+        panels.append(
+            result_panel(
+                self.summarizer_overrepr.panel_id(),
+                self.summarizer_overrepr.grade().grade,
+                self.summarizer_overrepr.module_legend(),
+                table_html,
+                panel_type="table",
+            )
+        )
+        return panels^
