@@ -22,6 +22,16 @@ struct KmerContent[KMERSIZE: Int](Copyable, Movable):
         self.max_length = 0
 
     @always_inline
+    fn tally_read(mut self, record: FastqRecord):
+        """Collector-compatible overload; uses read_num=0 (every read processed). For every-50th-read sampling, call tally_read(record, read_num)."""
+        self.tally_read(record, 0)
+
+    @always_inline
+    fn tally_read(mut self, record: RefRecord):
+        """Collector-compatible overload; uses read_num=0."""
+        self.tally_read(record, 0)
+
+    @always_inline
     fn tally_read(mut self, record: FastqRecord, read_num: Int64):
         comptime N_b = ord("N")
         comptime n_b = ord("n")

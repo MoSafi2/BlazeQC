@@ -5,7 +5,8 @@ from collections.list import List
 from python import Python, PythonObject
 from blazeseq import FastqRecord, RefRecord
 from blazeqc.stats.traits import Collector, Summarizer, PlotOutput
-from blazeqc.stats.summary_utils import SummaryContext, GradeEntry, DefaultOutputter
+from blazeqc.stats.reporting_traits import FastqcDataOutput, FastqcHtmlOutput
+from blazeqc.stats.summary_utils import SummaryContext, GradeEntry, DefaultOutputter, DataEntry, PanelEntry
 from blazeqc.stats.over_represented import OverRepresentedSequence
 from blazeqc.helpers import list_float64_to_numpy, encode_img_b64
 from blazeqc.html_maker import result_panel, _make_row, _make_table
@@ -323,7 +324,7 @@ struct OverrepresentedSequencesSummarizer(Summarizer, PlotOutput, Copyable, Mova
 
 # ----- Assembled module -----
 
-struct DupModule(Copyable, Movable):
+struct DupModule(FastqcDataOutput, FastqcHtmlOutput, Copyable, Movable):
     var collector: DupCollector
     var summarizer_dup: DuplicateSequencesSummarizer
     var summarizer_overrepr: OverrepresentedSequencesSummarizer
@@ -349,35 +350,34 @@ struct DupModule(Copyable, Movable):
         self.summarizer_overrepr.feed_prepared(prepared.overrepresented)
         self.summarizer_overrepr.summerize(ctx)
 
-    fn to_data_text(self, ctx: SummaryContext) raises -> String:
-        var out = DefaultOutputter()
+    fn data_entries(self, ctx: SummaryContext) raises -> List[DataEntry]:
         var body_dup = self.summarizer_dup.data_block_body()
         var g_dup = self.summarizer_dup.grade()
         var body_over = self.summarizer_overrepr.data_block_body()
         var g_over = self.summarizer_overrepr.grade()
-        return out.wrap_data_block(
-            self.summarizer_dup.module_legend(), g_dup.grade, body_dup
-        ) + out.wrap_data_block(
-            "Overrepresented sequences", g_over.grade, body_over
-        )
+        var entries = List[DataEntry]()
+        entries.append(DataEntry(self.summarizer_dup.module_legend(), g_dup.grade, body_dup))
+        entries.append(DataEntry("Overrepresented sequences", g_over.grade, body_over))
+        return entries^
 
-    fn to_html_panels(self, figures: List[PythonObject]) raises -> Dict[String, result_panel]:
-        var out = DefaultOutputter()
-        var panel_dup = out.make_panel(
+    fn panel_entries(self, figures: List[PythonObject]) raises -> List[PanelEntry]:
+        var table_html = self.summarizer_overrepr.table_html()
+        var py_none = Python.evaluate("None")
+        var entries = List[PanelEntry]()
+        entries.append(PanelEntry(
             self.summarizer_dup.panel_id(),
             self.summarizer_dup.grade().grade,
             self.summarizer_dup.module_legend(),
+            "image",
             figures[0],
-        )
-        var table_html = self.summarizer_overrepr.table_html()
-        var panel_over = result_panel(
+            "",
+        ))
+        entries.append(PanelEntry(
             self.summarizer_overrepr.panel_id(),
             self.summarizer_overrepr.grade().grade,
             self.summarizer_overrepr.module_legend(),
+            "table",
+            py_none,
             table_html,
-            panel_type="table",
-        )
-        var d = Dict[String, result_panel]()
-        d[panel_dup.legand] = panel_dup^
-        d[panel_over.legand] = panel_over^
-        return d^
+        ))
+        return entries^

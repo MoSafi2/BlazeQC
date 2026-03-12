@@ -5,15 +5,9 @@ from collections.list import List
 from math import sqrt, exp, pi
 from python import Python, PythonObject
 from blazeseq import FastqRecord, RefRecord
-from blazeqc.stats.traits import (
-    Collector,
-    Summarizer,
-    PlotOutput,
-    FastqcHtmlOutput,
-    FastqcDataOutput,
-    ModuleReport,
-)
-from blazeqc.stats.summary_utils import SummaryContext, GradeEntry, DefaultOutputter
+from blazeqc.stats.traits import Collector, Summarizer, PlotOutput
+from blazeqc.stats.reporting_traits import FastqcDataOutput, FastqcHtmlOutput, ModuleReport
+from blazeqc.stats.summary_utils import SummaryContext, GradeEntry, DefaultOutputter, DataEntry, PanelEntry
 from blazeqc.helpers import tensor_to_numpy_1d, list_float64_to_numpy
 from blazeqc.html_maker import result_panel
 from blazeqc.limits import GC_SEQUENCE_WARN, GC_SEQUENCE_ERROR
@@ -209,12 +203,24 @@ struct CGModule(FastqcDataOutput, FastqcHtmlOutput, ModuleReport, Copyable, Mova
         self.collector = CGCollector()
         self.summarizer = CGSummarizer()
 
-    fn to_data_text(self, ctx: SummaryContext) raises -> String:
-        """FastQC-style data block text for this module."""
+    fn data_entries(self, ctx: SummaryContext) raises -> List[DataEntry]:
         var body = self.summarizer.data_block_body()
         var g = self.summarizer.grade()
-        var out = DefaultOutputter()
-        return out.wrap_data_block(self.summarizer.module_legend(), g.grade, body)
+        var entries = List[DataEntry]()
+        entries.append(DataEntry(self.summarizer.module_legend(), g.grade, body))
+        return entries^
+
+    fn panel_entries(self, figures: List[PythonObject]) raises -> List[PanelEntry]:
+        var entries = List[PanelEntry]()
+        entries.append(PanelEntry(
+            self.summarizer.panel_id(),
+            self.summarizer.grade().grade,
+            self.summarizer.module_legend(),
+            "image",
+            figures[0],
+            "",
+        ))
+        return entries^
 
     fn to_html(self) raises -> result_panel:
         var fig = self.summarizer.plot_result()
@@ -225,19 +231,6 @@ struct CGModule(FastqcDataOutput, FastqcHtmlOutput, ModuleReport, Copyable, Mova
             self.summarizer.module_legend(),
             fig,
         )
-
-    fn to_html_panels(self, figures: List[PythonObject]) raises -> Dict[String, result_panel]:
-        """Return dict of HTML panels keyed by module_legend (single GC content panel)."""
-        var out = DefaultOutputter()
-        var panel = out.make_panel(
-            self.summarizer.panel_id(),
-            self.summarizer.grade().grade,
-            self.summarizer.module_legend(),
-            figures[0],
-        )
-        var d = Dict[String, result_panel]()
-        d[panel.legand] = panel^
-        return d^
 
     fn plot_result(self) raises -> PythonObject:
         """Delegate to summarizer for plot; ModuleReport entry point."""

@@ -5,7 +5,8 @@ from collections.list import List
 from python import Python, PythonObject
 from blazeseq import FastqRecord, RefRecord
 from blazeqc.stats.traits import Collector, Summarizer, PlotOutput
-from blazeqc.stats.summary_utils import SummaryContext, GradeEntry, DefaultOutputter
+from blazeqc.stats.reporting_traits import FastqcDataOutput, FastqcHtmlOutput
+from blazeqc.stats.summary_utils import SummaryContext, GradeEntry, DefaultOutputter, DataEntry, PanelEntry
 from blazeqc.helpers import (
     Matrix2D,
     grow_tensor,
@@ -421,7 +422,7 @@ struct TileQualitySummarizer(Summarizer, PlotOutput, Copyable, Movable):
 
 # ----- Assembled module -----
 
-struct TileQualityModule(Copyable, Movable):
+struct TileQualityModule(FastqcDataOutput, FastqcHtmlOutput, Copyable, Movable):
     var collector: TileQualityCollector
     var summarizer: TileQualitySummarizer
 
@@ -440,25 +441,24 @@ struct TileQualityModule(Copyable, Movable):
         self.summarizer.feed_prepared(prepared)
         self.summarizer.summerize(ctx)
 
-    fn to_data_text(self, ctx: SummaryContext) raises -> String:
-        var out = DefaultOutputter()
+    fn data_entries(self, ctx: SummaryContext) raises -> List[DataEntry]:
         var body = self.summarizer.data_block_body()
         var g = self.summarizer.grade()
-        return out.wrap_data_block(
-            self.summarizer.module_legend(), g.grade, body
-        )
+        var entries = List[DataEntry]()
+        entries.append(DataEntry(self.summarizer.module_legend(), g.grade, body))
+        return entries^
 
-    fn to_html_panels(self, figures: List[PythonObject]) raises -> Dict[String, result_panel]:
-        var out = DefaultOutputter()
-        var panel = out.make_panel(
+    fn panel_entries(self, figures: List[PythonObject]) raises -> List[PanelEntry]:
+        var entries = List[PanelEntry]()
+        entries.append(PanelEntry(
             self.summarizer.panel_id(),
             self.summarizer.grade().grade,
             self.summarizer.module_legend(),
+            "image",
             figures[0],
-        )
-        var d = Dict[String, result_panel]()
-        d[panel.legand] = panel^
-        return d^
+            "",
+        ))
+        return entries^
 
     fn plot_result(self) raises -> PythonObject:
         return self.summarizer.plot_result()

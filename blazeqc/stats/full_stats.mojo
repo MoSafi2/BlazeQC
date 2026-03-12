@@ -20,6 +20,31 @@ from blazeqc.html_maker import (
     format_length,
 )
 
+# ----- Module order: single source of truth for report order -----
+# Adding a new stat = add id constant, append to _module_order(), and add cases in dispatch helpers below.
+
+comptime ReportModuleId = Int
+comptime REPORT_MODULE_QUALITY: ReportModuleId = 0
+comptime REPORT_MODULE_TILE: ReportModuleId = 1
+comptime REPORT_MODULE_BASEPAIR: ReportModuleId = 2
+comptime REPORT_MODULE_CG: ReportModuleId = 3
+comptime REPORT_MODULE_LENGTH: ReportModuleId = 4
+comptime REPORT_MODULE_DUP: ReportModuleId = 5
+comptime REPORT_MODULE_ADAPTER: ReportModuleId = 6
+
+fn _module_order() -> List[ReportModuleId]:
+    """Order of report modules (data file and HTML panels)."""
+    var order = List[ReportModuleId]()
+    order.append(REPORT_MODULE_QUALITY)
+    order.append(REPORT_MODULE_TILE)
+    order.append(REPORT_MODULE_BASEPAIR)
+    order.append(REPORT_MODULE_CG)
+    order.append(REPORT_MODULE_LENGTH)
+    order.append(REPORT_MODULE_DUP)
+    order.append(REPORT_MODULE_ADAPTER)
+    return order^
+
+
 # ----- Report data (FastQC-style data file) -----
 # FullStats.write_data(file_name) writes ##BlazeQC, basic stats, then each module's write_module_data(f).
 
@@ -51,25 +76,47 @@ struct FullStats(Copyable):
     fn tally(mut self, record: FastqRecord):
         self.num_reads += 1
         self.total_bases += len(record)
-        self.bp_dist.collector.tally_read(record)
-        self.len_dist.collector.tally_read(record)
-        self.cg_content.collector.tally_read(record)  # Almost Free
-        self.dup_reads.tally_read(record)
-        self.qu_dist.collector.tally_read(record)
-        self.adpt_cont.tally_read(record, self.num_reads)
-        self.tile_qual.tally_read(record)
+        for id in _module_order():
+            self._module_tally(id, record)
 
     @always_inline
     fn tally(mut self, record: RefRecord):
         self.num_reads += 1
         self.total_bases += len(record)
-        self.bp_dist.collector.tally_read(record)
-        self.len_dist.collector.tally_read(record)
-        self.cg_content.collector.tally_read(record)
-        self.dup_reads.tally_read(record)
-        self.qu_dist.collector.tally_read(record)
-        self.adpt_cont.tally_read(record, self.num_reads)
-        self.tile_qual.tally_read(record)
+        for id in _module_order():
+            self._module_tally(id, record)
+
+    fn _module_tally(mut self, id: ReportModuleId, record: FastqRecord):
+        if id == REPORT_MODULE_QUALITY:
+            self.qu_dist.collector.tally_read(record)
+        elif id == REPORT_MODULE_TILE:
+            self.tile_qual.tally_read(record)
+        elif id == REPORT_MODULE_BASEPAIR:
+            self.bp_dist.collector.tally_read(record)
+        elif id == REPORT_MODULE_CG:
+            self.cg_content.collector.tally_read(record)
+        elif id == REPORT_MODULE_LENGTH:
+            self.len_dist.collector.tally_read(record)
+        elif id == REPORT_MODULE_DUP:
+            self.dup_reads.tally_read(record)
+        elif id == REPORT_MODULE_ADAPTER:
+            self.adpt_cont.tally_read(record, self.num_reads)
+
+    fn _module_tally(mut self, id: ReportModuleId, record: RefRecord):
+        if id == REPORT_MODULE_QUALITY:
+            self.qu_dist.collector.tally_read(record)
+        elif id == REPORT_MODULE_TILE:
+            self.tile_qual.tally_read(record)
+        elif id == REPORT_MODULE_BASEPAIR:
+            self.bp_dist.collector.tally_read(record)
+        elif id == REPORT_MODULE_CG:
+            self.cg_content.collector.tally_read(record)
+        elif id == REPORT_MODULE_LENGTH:
+            self.len_dist.collector.tally_read(record)
+        elif id == REPORT_MODULE_DUP:
+            self.dup_reads.tally_read(record)
+        elif id == REPORT_MODULE_ADAPTER:
+            self.adpt_cont.tally_read(record, self.num_reads)
 
     @always_inline
     fn make_base_stats(self) raises -> result_panel:
@@ -160,19 +207,99 @@ struct FullStats(Copyable):
     fn prepare_data(mut self, file_name: String) raises:
         """Fill all module caches. Call before write_data and build_panels."""
         var ctx = SummaryContext(self.num_reads, self.total_bases, file_name)
-        self.qu_dist.summarizer_base.feed(self.qu_dist.collector)
-        self.qu_dist.summarizer_seq.feed(self.qu_dist.collector)
-        self.qu_dist.summarizer_base.summerize(ctx)
-        self.qu_dist.summarizer_seq.summerize(ctx)
-        self.tile_qual.prepare_summarizers(ctx)
-        self.bp_dist.prepare_summarizers(ctx)
-        self.cg_content.summarizer.feed(self.cg_content.collector)
-        self.cg_content.summarizer.summerize(ctx)
-        self.len_dist.summarizer.feed_(self.len_dist.collector)
-        self.len_dist.summarizer.summerize(ctx)
-        self.dup_reads.prepare_summarizers(ctx)
-        self.adpt_cont.summarizer.feed(self.adpt_cont.collector)
-        self.adpt_cont.summarizer.summerize(ctx)
+        for id in _module_order():
+            self._module_prepare(id, ctx)
+
+    fn _module_prepare(mut self, id: ReportModuleId, ctx: SummaryContext) raises:
+        if id == REPORT_MODULE_QUALITY:
+            self.qu_dist.summarizer_base.feed(self.qu_dist.collector)
+            self.qu_dist.summarizer_seq.feed(self.qu_dist.collector)
+            self.qu_dist.summarizer_base.summerize(ctx)
+            self.qu_dist.summarizer_seq.summerize(ctx)
+        elif id == REPORT_MODULE_TILE:
+            self.tile_qual.prepare_summarizers(ctx)
+        elif id == REPORT_MODULE_BASEPAIR:
+            self.bp_dist.prepare_summarizers(ctx)
+        elif id == REPORT_MODULE_CG:
+            self.cg_content.summarizer.feed(self.cg_content.collector)
+            self.cg_content.summarizer.summerize(ctx)
+        elif id == REPORT_MODULE_LENGTH:
+            self.len_dist.summarizer.feed_(self.len_dist.collector)
+            self.len_dist.summarizer.summerize(ctx)
+        elif id == REPORT_MODULE_DUP:
+            self.dup_reads.prepare_summarizers(ctx)
+        elif id == REPORT_MODULE_ADAPTER:
+            self.adpt_cont.summarizer.feed(self.adpt_cont.collector)
+            self.adpt_cont.summarizer.summerize(ctx)
+
+    fn _module_data_text(self, id: ReportModuleId, ctx: SummaryContext) raises -> String:
+        if id == REPORT_MODULE_QUALITY:
+            return self.qu_dist.to_data_text(ctx)
+        elif id == REPORT_MODULE_TILE:
+            return self.tile_qual.to_data_text(ctx)
+        elif id == REPORT_MODULE_BASEPAIR:
+            return self.bp_dist.to_data_text(ctx)
+        elif id == REPORT_MODULE_CG:
+            return self.cg_content.to_data_text(ctx)
+        elif id == REPORT_MODULE_LENGTH:
+            return self.len_dist.to_data_text(ctx)
+        elif id == REPORT_MODULE_DUP:
+            return self.dup_reads.to_data_text(ctx)
+        elif id == REPORT_MODULE_ADAPTER:
+            return self.adpt_cont.to_data_text(ctx)
+        return ""
+
+    fn _module_figures(mut self, id: ReportModuleId) raises -> List[PythonObject]:
+        if id == REPORT_MODULE_QUALITY:
+            var qu_plots = self.qu_dist.plot()
+            var lst = List[PythonObject]()
+            lst.append(qu_plots[0])
+            lst.append(qu_plots[1])
+            return lst^
+        elif id == REPORT_MODULE_TILE:
+            var lst = List[PythonObject]()
+            lst.append(self.tile_qual.plot_result())
+            return lst^
+        elif id == REPORT_MODULE_BASEPAIR:
+            var (bp_fig_n, bp_fig_seq) = self.bp_dist.plot_result()
+            var lst = List[PythonObject]()
+            lst.append(bp_fig_n)
+            lst.append(bp_fig_seq)
+            return lst^
+        elif id == REPORT_MODULE_CG:
+            var lst = List[PythonObject]()
+            lst.append(self.cg_content.plot_result())
+            return lst^
+        elif id == REPORT_MODULE_LENGTH:
+            var lst = List[PythonObject]()
+            lst.append(self.len_dist.plot_result())
+            return lst^
+        elif id == REPORT_MODULE_DUP:
+            var lst = List[PythonObject]()
+            lst.append(self.dup_reads.summarizer_dup.plot_result())
+            return lst^
+        elif id == REPORT_MODULE_ADAPTER:
+            var lst = List[PythonObject]()
+            lst.append(self.adpt_cont.plot(self.num_reads))
+            return lst^
+        return List[PythonObject]()
+
+    fn _module_panels(self, id: ReportModuleId, figures: List[PythonObject]) raises -> Dict[String, result_panel]:
+        if id == REPORT_MODULE_QUALITY:
+            return self.qu_dist.to_html_panels(figures)
+        elif id == REPORT_MODULE_TILE:
+            return self.tile_qual.to_html_panels(figures)
+        elif id == REPORT_MODULE_BASEPAIR:
+            return self.bp_dist.to_html_panels(figures)
+        elif id == REPORT_MODULE_CG:
+            return self.cg_content.to_html_panels(figures)
+        elif id == REPORT_MODULE_LENGTH:
+            return self.len_dist.to_html_panels(figures)
+        elif id == REPORT_MODULE_DUP:
+            return self.dup_reads.to_html_panels(figures)
+        elif id == REPORT_MODULE_ADAPTER:
+            return self.adpt_cont.to_html_panels(figures)
+        return Dict[String, result_panel]()
 
     fn write_data(mut self, file_name: String) raises:
         """Write FastQC-style data file. Calls prepare_data then writes each module block."""
@@ -212,64 +339,19 @@ struct FullStats(Copyable):
 
             # Module blocks in panel order (each returns its block text)
             var ctx = SummaryContext(self.num_reads, self.total_bases, file_name)
-            f.write(self.qu_dist.to_data_text(ctx))
-            f.write(self.tile_qual.to_data_text(ctx))
-            f.write(self.bp_dist.to_data_text(ctx))
-            f.write(self.cg_content.to_data_text(ctx))
-            f.write(self.len_dist.to_data_text(ctx))
-            f.write(self.dup_reads.to_data_text(ctx))
-            f.write(self.adpt_cont.to_data_text(ctx))
+            for id in _module_order():
+                f.write(self._module_data_text(id, ctx))
 
     fn build_panels(mut self) raises -> Dict[String, result_panel]:
         var panels = Dict[String, result_panel]()
         var base_stats = self.make_base_stats()
         panels[base_stats.legand] = base_stats^
 
-        var qu_figs = self.qu_dist.plot()
-        var qu_fig_list = List[PythonObject]()
-        qu_fig_list.append(qu_figs[0])
-        qu_fig_list.append(qu_figs[1])
-        var qu_panels = self.qu_dist.to_html_panels(qu_fig_list)
-        for entry in qu_panels.items():
-            panels[entry.key] = entry.value.copy()
-
-        var tile_fig_list = List[PythonObject]()
-        tile_fig_list.append(self.tile_qual.plot_result())
-        var tile_panels = self.tile_qual.to_html_panels(tile_fig_list)
-        for entry in tile_panels.items():
-            panels[entry.key] = entry.value.copy()
-
-        var (bp_fig_n, bp_fig_seq) = self.bp_dist.plot_result()
-        var bp_fig_list = List[PythonObject]()
-        bp_fig_list.append(bp_fig_n)
-        bp_fig_list.append(bp_fig_seq)
-        var bp_panels = self.bp_dist.to_html_panels(bp_fig_list)
-        for entry in bp_panels.items():
-            panels[entry.key] = entry.value.copy()
-
-        var cg_fig_list = List[PythonObject]()
-        cg_fig_list.append(self.cg_content.plot_result())
-        var cg_panels = self.cg_content.to_html_panels(cg_fig_list)
-        for entry in cg_panels.items():
-            panels[entry.key] = entry.value.copy()
-
-        var len_fig_list = List[PythonObject]()
-        len_fig_list.append(self.len_dist.plot_result())
-        var len_panels = self.len_dist.to_html_panels(len_fig_list)
-        for entry in len_panels.items():
-            panels[entry.key] = entry.value.copy()
-
-        var dup_fig_list = List[PythonObject]()
-        dup_fig_list.append(self.dup_reads.summarizer_dup.plot_result())
-        var dup_panels = self.dup_reads.to_html_panels(dup_fig_list)
-        for entry in dup_panels.items():
-            panels[entry.key] = entry.value.copy()
-
-        var adapter_fig_list = List[PythonObject]()
-        adapter_fig_list.append(self.adpt_cont.plot(self.num_reads))
-        var adapter_panels = self.adpt_cont.to_html_panels(adapter_fig_list)
-        for entry in adapter_panels.items():
-            panels[entry.key] = entry.value.copy()
+        for id in _module_order():
+            var figures = self._module_figures(id)
+            var module_panels = self._module_panels(id, figures)
+            for entry in module_panels.items():
+                panels[entry.key] = entry.value.copy()
 
         return panels^
 
@@ -318,6 +400,7 @@ fn write_summary_file(
 
 
 fn _panel_order() raises -> List[String]:
+    """Order of panel names for HTML and summary file. Must match panel keys from each module's to_html_panels."""
     var order = List[String]()
     order.append("Basic Statistics")
     order.append("Per Sequence Quality Scores")

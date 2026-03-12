@@ -1,11 +1,8 @@
-"""Stats traits: summarization and output interfaces (separate from collection implementations)."""
+"""Stats traits: collection and summarization (core). FastQC output traits live in reporting_traits.mojo."""
 
-from collections.dict import Dict
-from collections.list import List
 from python import PythonObject
-from blazeqc.html_maker import result_panel
 from blazeseq import FastqRecord, RefRecord
-from blazeqc.stats.summary_utils import SummaryContext, GradeEntry, DefaultOutputter
+from blazeqc.stats.summary_utils import SummaryContext, GradeEntry
 
 
 trait Collector(Copyable):
@@ -17,9 +14,7 @@ trait Collector(Copyable):
 
 
 trait Summarizer(Copyable, PlotOutput):
-    """Main interface for summarization: prepare derived data and expose grades (pass/warn/fail).
-    Also provide different types of Output interfaces.
-    """
+    """Main interface for summarization: prepare derived data and expose grades (pass/warn/fail)."""
     fn summerize(mut self, ctx: SummaryContext) raises:
         ...
 
@@ -41,28 +36,6 @@ trait Summarizer(Copyable, PlotOutput):
 
 trait PlotOutput(Copyable):
     """Output: plot results."""
-    fn plot_result(self) raises -> PythonObject:
-        ...
-
-
-trait FastqcHtmlOutput(Copyable):
-    """Output: result_panel for HTML report. Caller calls plot_result() and passes figures to to_html_panels."""
-    fn to_html(self) raises -> result_panel:
-        ...
-
-    fn to_html_panels(self, figures: List[PythonObject]) raises -> Dict[String, result_panel]:
-        """Build panels from pre-computed figures; returns dict keyed by module_legend."""
-        ...
-
-
-trait FastqcDataOutput(Copyable):
-    """Output: FastQC-style data block text."""
-    fn to_data_text(self, ctx: SummaryContext) raises -> String:
-        ...
-
-
-trait ModuleReport(FastqcDataOutput, FastqcHtmlOutput, Copyable):
-    """Container module: to_data_text, to_html_panels, and plot_result (delegates to summarizer)."""
     fn plot_result(self) raises -> PythonObject:
         ...
 

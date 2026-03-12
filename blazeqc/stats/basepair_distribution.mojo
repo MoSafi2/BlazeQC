@@ -4,15 +4,9 @@ from collections.dict import Dict
 from collections.list import List
 from python import Python, PythonObject
 from blazeseq import FastqRecord, RefRecord
-from blazeqc.stats.traits import (
-    Collector,
-    Summarizer,
-    PlotOutput,
-    FastqcHtmlOutput,
-    FastqcDataOutput,
-    ModuleReport,
-)
-from blazeqc.stats.summary_utils import SummaryContext, GradeEntry, DefaultOutputter
+from blazeqc.stats.traits import Collector, Summarizer, PlotOutput
+from blazeqc.stats.reporting_traits import FastqcDataOutput, FastqcHtmlOutput, ModuleReport
+from blazeqc.stats.summary_utils import SummaryContext, GradeEntry, DefaultOutputter, DataEntry, PanelEntry
 from blazeqc.helpers import (
     Matrix2D,
     matrix_to_numpy,
@@ -381,36 +375,35 @@ struct BasepairModule(FastqcDataOutput, FastqcHtmlOutput, Copyable, Movable):
             fig,
         )
 
-    fn to_data_text(self, ctx: SummaryContext) raises -> String:
-        var out = DefaultOutputter()
+    fn data_entries(self, ctx: SummaryContext) raises -> List[DataEntry]:
         var body_seq = self.summarizer_seq.data_block_body()
         var g_seq = self.summarizer_seq.grade()
         var body_n = self.summarizer_n.data_block_body()
         var g_n = self.summarizer_n.grade()
-        return out.wrap_data_block(
-            self.summarizer_seq.module_legend(), g_seq.grade, body_seq
-        ) + out.wrap_data_block(
-            self.summarizer_n.module_legend(), g_n.grade, body_n
-        )
+        var entries = List[DataEntry]()
+        entries.append(DataEntry(self.summarizer_seq.module_legend(), g_seq.grade, body_seq))
+        entries.append(DataEntry(self.summarizer_n.module_legend(), g_n.grade, body_n))
+        return entries^
 
-    fn to_html_panels(self, figures: List[PythonObject]) raises -> Dict[String, result_panel]:
-        var out = DefaultOutputter()
-        var panel_seq = out.make_panel(
+    fn panel_entries(self, figures: List[PythonObject]) raises -> List[PanelEntry]:
+        var entries = List[PanelEntry]()
+        entries.append(PanelEntry(
             self.summarizer_seq.panel_id(),
             self.summarizer_seq.grade().grade,
             self.summarizer_seq.module_legend(),
+            "image",
             figures[1],
-        )
-        var panel_n = out.make_panel(
+            "",
+        ))
+        entries.append(PanelEntry(
             self.summarizer_n.panel_id(),
             self.summarizer_n.grade().grade,
             self.summarizer_n.module_legend(),
+            "image",
             figures[0],
-        )
-        var d = Dict[String, result_panel]()
-        d[panel_seq.legand] = panel_seq^
-        d[panel_n.legand] = panel_n^
-        return d^
+            "",
+        ))
+        return entries^
 
     fn plot_result(self) raises -> Tuple[PythonObject, PythonObject]:
         """Return (N figure, sequence content figure) for legacy plot() API."""

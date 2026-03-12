@@ -5,7 +5,8 @@ from collections.dict import Dict
 from collections.list import List
 from blazeseq import FastqRecord, RefRecord
 from blazeqc.stats.traits import Collector, Summarizer, PlotOutput
-from blazeqc.stats.summary_utils import SummaryContext, GradeEntry, DefaultOutputter
+from blazeqc.stats.reporting_traits import FastqcDataOutput, FastqcHtmlOutput
+from blazeqc.stats.summary_utils import SummaryContext, GradeEntry, DefaultOutputter, DataEntry, PanelEntry
 from blazeqc.helpers import (
     Matrix2D,
     matrix_to_numpy,
@@ -433,7 +434,7 @@ fn _guess_schema_from_collector(qu_dist: Matrix2D[DType.int64], max_length: Int)
 
 # ----- Assembled module: Collector + two Summarizers -----
 
-struct QualityModule(Copyable, Movable):
+struct QualityModule(FastqcDataOutput, FastqcHtmlOutput, Copyable, Movable):
     """Module assembling QualityCollector + PerBaseQualitySummarizer + PerSequenceQualitySummarizer."""
     var collector: QualityCollector
     var summarizer_base: PerBaseQualitySummarizer
@@ -444,36 +445,35 @@ struct QualityModule(Copyable, Movable):
         self.summarizer_base = PerBaseQualitySummarizer()
         self.summarizer_seq = PerSequenceQualitySummarizer()
 
-    fn to_data_text(self, ctx: SummaryContext) raises -> String:
-        var out = DefaultOutputter()
+    fn data_entries(self, ctx: SummaryContext) raises -> List[DataEntry]:
         var body_base = self.summarizer_base.data_block_body()
         var g_base = self.summarizer_base.grade()
         var body_seq = self.summarizer_seq.data_block_body()
         var g_seq = self.summarizer_seq.grade()
-        return out.wrap_data_block(
-            self.summarizer_base.module_legend(), g_base.grade, body_base
-        ) + out.wrap_data_block(
-            self.summarizer_seq.module_legend(), g_seq.grade, body_seq
-        )
+        var entries = List[DataEntry]()
+        entries.append(DataEntry(self.summarizer_base.module_legend(), g_base.grade, body_base))
+        entries.append(DataEntry(self.summarizer_seq.module_legend(), g_seq.grade, body_seq))
+        return entries^
 
-    fn to_html_panels(self, figures: List[PythonObject]) raises -> Dict[String, result_panel]:
-        var out = DefaultOutputter()
-        var panel_base = out.make_panel(
+    fn panel_entries(self, figures: List[PythonObject]) raises -> List[PanelEntry]:
+        var entries = List[PanelEntry]()
+        entries.append(PanelEntry(
             self.summarizer_base.panel_id(),
             self.summarizer_base.grade().grade,
             self.summarizer_base.module_legend(),
+            "image",
             figures[0],
-        )
-        var panel_seq = out.make_panel(
+            "",
+        ))
+        entries.append(PanelEntry(
             self.summarizer_seq.panel_id(),
             self.summarizer_seq.grade().grade,
             self.summarizer_seq.module_legend(),
+            "image",
             figures[1],
-        )
-        var d = Dict[String, result_panel]()
-        d[panel_base.legand] = panel_base^
-        d[panel_seq.legand] = panel_seq^
-        return d^
+            "",
+        ))
+        return entries^
 
     fn plot(self) raises -> Tuple[PythonObject, PythonObject]:
         return Tuple(

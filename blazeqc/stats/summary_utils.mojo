@@ -1,8 +1,73 @@
 """Summarization utilities: shared structs used by stats modules."""
 
+from collections.dict import Dict
+from collections.list import List
 from python import PythonObject
 from blazeqc.html_maker import result_panel
 from blazeqc.helpers import encode_img_b64
+
+
+struct DataEntry(Copyable, ImplicitlyCopyable):
+    """One module's data block: (module_legend, grade, body) for FastQC data file."""
+    var module_legend: String
+    var grade: String
+    var body: String
+
+    fn __init__(out self, module_legend: String, grade: String, body: String):
+        self.module_legend = module_legend
+        self.grade = grade
+        self.body = body
+
+
+struct PanelEntry(Copyable, ImplicitlyCopyable):
+    """One panel for HTML report: image (figure) or table (html_content)."""
+    var panel_id: String
+    var grade: String
+    var legend: String
+    var panel_type: String  # "image" or "table"
+    var figure: PythonObject  # for image; use Python.none() for table
+    var html_content: String  # for table; empty for image
+
+    fn __init__(
+        out self,
+        panel_id: String,
+        grade: String,
+        legend: String,
+        panel_type: String,
+        figure: PythonObject,
+        html_content: String,
+    ):
+        self.panel_id = panel_id
+        self.grade = grade
+        self.legend = legend
+        self.panel_type = panel_type
+        self.figure = figure
+        self.html_content = html_content
+
+
+fn wrap_data_blocks(entries: List[DataEntry]) -> String:
+    """Build FastQC-style data block text from a list of data entries."""
+    var out = DefaultOutputter()
+    var result = String("")
+    for i in range(len(entries)):
+        var e = entries[i].copy()
+        result += out.wrap_data_block(e.module_legend, e.grade, e.body)
+    return result
+
+
+fn make_panels(entries: List[PanelEntry]) raises -> Dict[String, result_panel]:
+    """Build dict of result_panel keyed by legend from panel entries (image or table)."""
+    var out = DefaultOutputter()
+    var d = Dict[String, result_panel]()
+    for i in range(len(entries)):
+        var e = entries[i].copy()
+        var p: result_panel
+        if e.panel_type == "image":
+            p = out.make_panel(e.panel_id, e.grade, e.legend, e.figure)
+        else:
+            p = result_panel(e.panel_id, e.grade, e.legend, e.html_content, panel_type="table")
+        d[p.legand] = p^
+    return d^
 
 
 struct SummaryContext(Copyable):
