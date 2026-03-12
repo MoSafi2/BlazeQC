@@ -22,7 +22,7 @@ from blazeqc.limits import GC_SEQUENCE_WARN, GC_SEQUENCE_ERROR
 # ----- Collector: tally only -----
 
 struct CGCollector(Collector, Copyable, Movable):
-    """Collection only: raw cg_content counts. No prepare, grades, or output."""
+    """GC Collector: collect GC content counts per read."""
     var cg_content: List[Int64]
 
     fn __init__(out self) raises:
@@ -30,6 +30,8 @@ struct CGCollector(Collector, Copyable, Movable):
         for _ in range(101):
             self.cg_content.append(0)
 
+    # TODO: Optimize this to use a SIMD bitmask instead of a loop.
+    @always_inline
     fn tally_read(mut self, record: FastqRecord):
         if len(record) == 0:
             return
@@ -46,6 +48,7 @@ struct CGCollector(Collector, Copyable, Movable):
         )
         self.cg_content[read_cg_content] += 1
 
+    @always_inline
     fn tally_read(mut self, record: RefRecord):
         if len(record) == 0:
             return
@@ -65,7 +68,7 @@ struct CGCollector(Collector, Copyable, Movable):
 
 # ----- Summarizer: prepare + grades + data for output + to_plot -----
 
-struct CGSummarizer(Summarizer, Copyable, Movable):
+struct CGSummarizer(Summarizer, PlotOutput, Copyable, Movable):
     """Summarization and plotting in one struct. Feed collector then prepare(ctx)."""
     var _cache_theoretical: List[Float64]
     var _cache_cg_content: List[Int64]
@@ -84,11 +87,11 @@ struct CGSummarizer(Summarizer, Copyable, Movable):
         for i in range(len(collector.cg_content)):
             self._cache_cg_content.append(collector.cg_content[i])
 
-    fn _calculate_theoretical_distribution(self, counts: List[Int64]) -> List[Float64]:
+    fn _calculate_theoretical_distribution(self, counts: List[Int64], total_counts: Int64) -> List[Float64]:
         """Compute a theoretical normal distribution fitted to the observed GC bin counts.
 
         Algorithm: 
-        (1) Sum counts and find the mode (GC bin with maximum count).
+        (1) Find the mode (GC bin with maximum count).
         (2) Compute weighted standard deviation: sum over bins of (bin - mode)^2 * count,
         divided by (total - 1).
         (3) Evaluate the normal PDF with that mean and stdev at
@@ -97,31 +100,13 @@ struct CGSummarizer(Summarizer, Copyable, Movable):
         """
         var n = len(counts)
         var result = List[Float64](length=n, fill=0.0)
-
-        # Total number of reads across all GC bins
-        var total_counts: Int64 = 0
-        for i in range(n):
-            total_counts += counts[i]
-
         if total_counts == 0:
             return result^
 
         # Mode = bin index with highest count (location of the normal)
-        var mode: Int = 0
-        var max_count: Int64 = counts[0]
-        for i in range(1, n):
-            if counts[i] > max_count:
-                max_count = counts[i]
-                mode = i
-
-        # Weighted variance: sum of (x - mode)^2 * weight, then stdev = sqrt(variance)
-        var stdev: Float64 = 0.0
-        if total_counts > 1:
-            var sum_sq: Float64 = 0.0
-            for i in range(n):
-                var diff = Float64(i) - Float64(mode)
-                sum_sq += diff * diff * Float64(counts[i])
-            stdev = sqrt(sum_sq / Float64(total_counts - 1))
+        var mode = _mode(counts, n)
+        # Weighted standard deviation of GC bins around the mode
+        var stdev = _weighted_stdev(counts, mode, total_counts)
 
         var total_f = Float64(total_counts)
         var mode_f = Float64(mode)
@@ -130,13 +115,8 @@ struct CGSummarizer(Summarizer, Copyable, Movable):
             result[mode] = total_f
             return result^
 
-        # Normal PDF: (1 / (stdev * sqrt(2*pi))) * exp(-0.5 * z^2), scaled by total
-        var scale = stdev * sqrt(2.0 * pi)
-        for i in range(n):
-            var x = Float64(i)
-            var z = (x - mode_f) / stdev
-            result[i] = (exp(-0.5 * z * z) / scale) * total_f
-
+        # Use standalone normal PDF helper for non-degenerate case
+        result = _normal_pdf(n, mode_f, stdev, total_f)
         return result^
 
     fn _max_gc_deviation(self) -> Float64:
@@ -169,9 +149,9 @@ struct CGSummarizer(Summarizer, Copyable, Movable):
                 max_dev = dev
         return max_dev
 
-    fn prepare(mut self, ctx: SummaryContext) raises:
+    fn summerize(mut self, ctx: SummaryContext) raises:
         """Compute theoretical and grade from cached counts (call feed(collector) first)."""
-        self._cache_theoretical = self._calculate_theoretical_distribution(self._cache_cg_content)
+        self._cache_theoretical = self._calculate_theoretical_distribution(self._cache_cg_content, ctx.num_reads)
         var max_dev = self._max_gc_deviation()
         if max_dev > GC_SEQUENCE_ERROR:
             self._cache_grade = "fail"
@@ -181,10 +161,8 @@ struct CGSummarizer(Summarizer, Copyable, Movable):
             self._cache_grade = "pass"
         self._cache_ready = True
 
-    fn grades(self) raises -> List[GradeEntry]:
-        var out = List[GradeEntry]()
-        out.append(GradeEntry("Per Sequence GC Content", self._cache_grade))
-        return out^
+    fn grade(self) raises -> GradeEntry:
+        return GradeEntry("Per Sequence GC Content", self._cache_grade)
 
     fn data_block_body(self) -> String:
         """Module-specific lines (header + data); Outputter wraps with >>name\tgrade and >>END_MODULE."""
@@ -201,7 +179,7 @@ struct CGSummarizer(Summarizer, Copyable, Movable):
     fn panel_id(self) -> String:
         return "cg_content"
 
-    fn to_plot(self) raises -> List[PythonObject]:
+    fn plot_result(self) raises -> PythonObject:
         """Build GC figure from cached data (summarizer is also the plotter)."""
         var plt = Python.import_module("matplotlib.pyplot")
         var arr = tensor_to_numpy_1d(self._cache_cg_content)
@@ -209,12 +187,13 @@ struct CGSummarizer(Summarizer, Copyable, Movable):
         var fig = x[0]
         var ax = x[1]
         ax.plot(arr, label="GC count per read")
-        ax.plot(list_float64_to_numpy(self._cache_theoretical), label="Theoritical Distribution")
+        ax.plot(
+            list_float64_to_numpy(self._cache_theoretical),
+            label="Theoretical distribution",
+        )
         ax.set_title("GC distribution over all sequences")
         ax.set_xlabel("Mean GC content (%)")
-        var figs = List[PythonObject]()
-        figs.append(fig)
-        return figs^
+        return fig
 
 
 # ----- Assembled module: Collector + Summarizer + DefaultOutputter -----
@@ -236,34 +215,94 @@ struct CGModule(Collector, Summarizer, TextOutput, PlotOutput, HtmlOutput, Copya
 
     fn prepare(mut self, ctx: SummaryContext) raises:
         self.summarizer.feed(self.collector)
-        self.summarizer.prepare(ctx)
+        self.summarizer.summerize(ctx)
+
+    fn summerize(mut self, ctx: SummaryContext) raises:
+        """Trait-compatible alias for prepare(ctx)."""
+        self.prepare(ctx)
+
+    fn grade(self) raises -> GradeEntry:
+        return self.summarizer.grade()
 
     fn grades(self) raises -> List[GradeEntry]:
-        return self.summarizer.grades()
+        """Return list of grade entries (single-panel API)."""
+        var out = List[GradeEntry]()
+        out.append(self.summarizer.grade())
+        return out^
 
     fn to_data_text(self, ctx: SummaryContext) raises -> String:
+        """FastQC-style data block text for this module."""
+        # ctx is currently unused but kept for trait compatibility.
+        var body = self.summarizer.data_block_body()
+        var g = self.summarizer.grade()
         var out = DefaultOutputter()
-        return out.wrap_data_block(
-            self.summarizer.module_legend(),
-            self.summarizer.grades()[0].grade,
-            self.summarizer.data_block_body(),
-        )
+        return out.wrap_data_block(self.summarizer.module_legend(), g.grade, body)
 
-    fn to_plot(self) raises -> List[PythonObject]:
-        return self.summarizer.to_plot()
+    fn plot_result(self) raises -> PythonObject:
+        return self.summarizer.plot_result()
+
+    fn to_html(self) raises -> result_panel:
+        var fig = self.summarizer.plot_result()
+        var out = DefaultOutputter()
+        return out.make_panel(
+            self.summarizer.panel_id(),
+            self.summarizer.grade().grade,
+            self.summarizer.module_legend(),
+            fig,
+        )
 
     fn to_html_panels(self) raises -> List[result_panel]:
-        var figs = self.summarizer.to_plot()
-        var out = DefaultOutputter()
-        var panel = out.make_panel(
-            self.summarizer.panel_id(),
-            self.summarizer.grades()[0].grade,
-            self.summarizer.module_legend(),
-            figs[0],
-        )
+        """Return list of HTML panels (single GC content panel)."""
         var panels = List[result_panel]()
-        panels.append(panel^)
+        panels.append(self.to_html())
         return panels^
 
 
 comptime CGContent = CGModule
+
+
+
+@always_inline
+fn _mode(counts: List[Int64], n: Int) -> Int:
+    var max_count: Int64 = counts[0]
+    var mode: Int = 0
+    for i in range(1, n):
+        if counts[i] > max_count:
+            max_count = counts[i]
+            mode = i
+    return mode
+
+
+@always_inline
+fn _weighted_stdev(counts: List[Int64], mode: Int, total_counts: Int64) -> Float64:
+    """Weighted standard deviation for histogram-like GC counts.
+
+    Uses indices as bin centers and 'counts' as weights, computing:
+        sqrt( sum_i (i - mode)^2 * counts[i] / (total_counts - 1) )
+    Returns 0.0 when total_counts <= 1.
+    """
+    if total_counts <= 1:
+        return 0.0
+    var n = len(counts)
+    var sum_sq: Float64 = 0.0
+    for i in range(n):
+        var diff = Float64(i) - Float64(mode)
+        sum_sq += diff * diff * Float64(counts[i])
+    return sqrt(sum_sq / Float64(total_counts - 1))
+
+
+@always_inline
+fn _normal_pdf(n: Int, mode: Float64, stdev: Float64, total: Float64) -> List[Float64]:
+    """Evaluate a normal PDF at integer bin centers [0, n), centered at `mode`.
+
+    Uses:
+        (1 / (stdev * sqrt(2*pi))) * exp(-0.5 * z^2), scaled by `total`,
+    where z = (x - mode) / stdev.
+    """
+    var result = List[Float64](length=n, fill=0.0)
+    var scale = stdev * sqrt(2.0 * pi)
+    for i in range(n):
+        var x = Float64(i)
+        var z = (x - mode) / stdev
+        result[i] = (exp(-0.5 * z * z) / scale) * total
+    return result^

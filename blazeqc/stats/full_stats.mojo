@@ -145,9 +145,8 @@ struct FullStats(Copyable):
         var bp_plots = self.bp_dist.plot(self.num_reads)
         plots.append(bp_plots[0])
         plots.append(bp_plots[1])
-        var cg_plots = self.cg_content.to_plot()
-        for p in cg_plots:
-            plots.append(p)
+        var cg_fig = self.cg_content.to_plot()
+        plots.append(cg_fig)
         plots.append(self.len_dist.plot())
         var dup_plot_result = self.dup_reads.plot(Int(self.num_reads))
         plots.append(dup_plot_result[0])

@@ -32,7 +32,7 @@ trait TextOutput(Copyable):
 
 trait PlotOutput(Copyable):
     """Output: one or more plot figures (single-panel modules return list of length 1)."""
-    fn to_plot(self) raises -> PythonObject:
+    fn plot_result(self) raises -> PythonObject:
         ...
 
 
