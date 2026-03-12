@@ -198,8 +198,8 @@ struct CGSummarizer(Summarizer, PlotOutput, Copyable, Movable):
 
 # ----- Assembled module: Collector + Summarizer + DefaultOutputter -----
 
-struct CGModule(Collector, Summarizer, FastqcDataOutput, FastqcHtmlOutput, Copyable, Movable):
-    """Module assembled from Collector + Summarizer; uses DefaultOutputter for text/HTML."""
+struct CGModule(FastqcDataOutput, FastqcHtmlOutput, Copyable, Movable):
+    """Module assembling CGCollector + CGSummarizer; exposes only data/text/HTML helpers."""
     var collector: CGCollector
     var summarizer: CGSummarizer
 
@@ -207,36 +207,12 @@ struct CGModule(Collector, Summarizer, FastqcDataOutput, FastqcHtmlOutput, Copya
         self.collector = CGCollector()
         self.summarizer = CGSummarizer()
 
-    fn tally_read(mut self, record: FastqRecord):
-        self.collector.tally_read(record)
-
-    fn tally_read(mut self, record: RefRecord):
-        self.collector.tally_read(record)
-
-    fn summerize(mut self, ctx: SummaryContext) raises:
-        """Trait-compatible alias for prepare(ctx)."""
-        self.summarizer.feed(self.collector)
-        self.summarizer.summerize(ctx)
-
-    fn grade(self) raises -> GradeEntry:
-        return self.summarizer.grade()
-
-    fn grades(self) raises -> List[GradeEntry]:
-        """Return list of grade entries (single-panel API)."""
-        var out = List[GradeEntry]()
-        out.append(self.summarizer.grade())
-        return out^
-
     fn to_data_text(self, ctx: SummaryContext) raises -> String:
         """FastQC-style data block text for this module."""
-        # ctx is currently unused but kept for trait compatibility.
         var body = self.summarizer.data_block_body()
         var g = self.summarizer.grade()
         var out = DefaultOutputter()
         return out.wrap_data_block(self.summarizer.module_legend(), g.grade, body)
-
-    fn plot_result(self) raises -> PythonObject:
-        return self.summarizer.plot_result()
 
     fn to_html(self) raises -> result_panel:
         var fig = self.summarizer.plot_result()

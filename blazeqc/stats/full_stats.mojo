@@ -8,7 +8,7 @@ from blazeqc.stats.summary_utils import SummaryContext
 from blazeqc.stats.basepair_distribution import BasepairDistribution
 from blazeqc.stats.cg_content import CGModule
 from blazeqc.stats.duplication import DupReads
-from blazeqc.stats.length_distribution import LengthDistribution
+from blazeqc.stats.length_distribution import LengthModule
 from blazeqc.stats.quality_distribution import QualityDistribution
 from blazeqc.stats.tile_quality import PerTileQuality
 from blazeqc.stats.adapter_content import AdapterContent
@@ -30,7 +30,7 @@ struct FullStats(Copyable):
     var num_reads: Int64
     var total_bases: Int64
     var bp_dist: BasepairDistribution
-    var len_dist: LengthDistribution
+    var len_dist: LengthModule
     var qu_dist: QualityDistribution
     var cg_content: CGModule
     var dup_reads: DupReads
@@ -40,7 +40,7 @@ struct FullStats(Copyable):
     fn __init__(out self) raises:
         self.num_reads = 0
         self.total_bases = 0
-        self.len_dist = LengthDistribution()
+        self.len_dist = LengthModule()
         self.bp_dist = BasepairDistribution()
         self.cg_content = CGModule()
         self.qu_dist = QualityDistribution()
@@ -53,8 +53,8 @@ struct FullStats(Copyable):
         self.num_reads += 1
         self.total_bases += len(record)
         self.bp_dist.tally_read(record)
-        self.len_dist.tally_read(record)
-        self.cg_content.tally_read(record)  # Almost Free
+        self.len_dist.collector.tally_read(record)
+        self.cg_content.collector.tally_read(record)  # Almost Free
         self.dup_reads.tally_read(record)
         self.qu_dist.tally_read(record)
         self.adpt_cont.tally_read(record, self.num_reads)
@@ -65,8 +65,8 @@ struct FullStats(Copyable):
         self.num_reads += 1
         self.total_bases += len(record)
         self.bp_dist.tally_read(record)
-        self.len_dist.tally_read(record)
-        self.cg_content.tally_read(record)
+        self.len_dist.collector.tally_read(record)
+        self.cg_content.collector.tally_read(record)
         self.dup_reads.tally_read(record)
         self.qu_dist.tally_read(record)
         self.adpt_cont.tally_read(record, self.num_reads)
@@ -147,9 +147,9 @@ struct FullStats(Copyable):
         var bp_plots = self.bp_dist.plot(self.num_reads)
         plots.append(bp_plots[0])
         plots.append(bp_plots[1])
-        var cg_fig = self.cg_content.plot_result()
+        var cg_fig = self.cg_content.summarizer.plot_result()
         plots.append(cg_fig)
-        plots.append(self.len_dist.plot())
+        plots.append(self.len_dist.plot_result())
         var dup_plot_result = self.dup_reads.plot(Int(self.num_reads))
         plots.append(dup_plot_result[0])
         var qu_plots = self.qu_dist.plot()
@@ -166,8 +166,10 @@ struct FullStats(Copyable):
         self.qu_dist.prepare_data()
         self.tile_qual.prepare_data()
         self.bp_dist.prepare_data(self.num_reads)
-        self.cg_content.prepare(ctx)
-        self.len_dist.prepare_data()
+        self.cg_content.summarizer.feed(self.cg_content.collector)
+        self.cg_content.summarizer.summerize(ctx)
+        self.len_dist.summarizer.feed_(self.len_dist.collector)
+        self.len_dist.summarizer.summerize(ctx)
         self.dup_reads.prepare_data(Int(self.num_reads))
         self.adpt_cont.prepare_data(self.num_reads)
 
@@ -213,7 +215,7 @@ struct FullStats(Copyable):
             f.write(self.tile_qual.get_module_data())
             f.write(self.bp_dist.get_module_data(self.num_reads))
             f.write(self.cg_content.to_data_text(ctx))
-            f.write(self.len_dist.get_module_data())
+            f.write(self.len_dist.to_data_text(ctx))
             f.write(self.dup_reads.get_module_data(Int(self.num_reads)))
             f.write(self.adpt_cont.get_module_data(self.num_reads))
 
@@ -242,7 +244,7 @@ struct FullStats(Copyable):
             var panel = cg_panels[i].copy()
             panels[panel.legand] = panel^
 
-        var sequence_length_distribution = self.len_dist.make_html()
+        var sequence_length_distribution = self.len_dist.to_html()
         panels[sequence_length_distribution.legand] = sequence_length_distribution^
 
         var dup_html = self.dup_reads.make_html(Int(self.num_reads))

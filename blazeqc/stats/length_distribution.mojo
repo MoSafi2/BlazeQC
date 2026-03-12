@@ -52,6 +52,7 @@ struct LengthCollector(Collector, Copyable, Movable):
         return Int(cum) / num_reads
 
 
+
 # ----- Summarizer: prepare + grades + data for output + to_plot -----
 
 struct LengthSummarizer(Summarizer, PlotOutput, Copyable, Movable):
@@ -78,7 +79,7 @@ struct LengthSummarizer(Summarizer, PlotOutput, Copyable, Movable):
         self._cache_status = ""
         self._cache_ready = False
 
-    fn feed(mut self, collector: LengthCollector):
+    fn feed_(mut self, collector: LengthCollector):
         """Copy collector counts into cache for summerize(ctx)."""
         self._cache_length_vector = List[Int64](capacity=len(collector.length_vector))
         for i in range(len(collector.length_vector)):
@@ -87,54 +88,19 @@ struct LengthSummarizer(Summarizer, PlotOutput, Copyable, Movable):
 
     fn summerize(mut self, ctx: SummaryContext) raises:
         """Compute binned length distribution and status from cached counts."""
-        var np = Python.import_module("numpy")
+        var min_len, max_len = _min_max_lengths_from_vector(self._cache_length_vector)
+        var starting, interval = self.get_size_distribution_(min_len, max_len)
 
-        var min_len: Int = 0
-        var max_len: Int = len(self._cache_length_vector)
-        for i in range(len(self._cache_length_vector)):
-            if self._cache_length_vector[i] > 0:
-                min_len = i + 1
-                break
-        if min_len > 0:
-            min_len -= 1
-        max_len += 1
+        var bins = _build_bins(starting, interval, max_len)
+        var x_categories = _build_x_categories(bins, interval, max_len)
+        var binned_arr = _bin_length_counts(self._cache_length_vector, bins)
+        var ticks, labels = _build_ticks_and_labels(x_categories)
 
-        var starting = 0
-        var interval = 1
-        starting, interval = self.get_size_distribution(min_len, max_len)
+        var num_bins = len(bins)
+        var first_nonzero_index = _first_nonzero_bin_index(binned_arr, num_bins)
+        var xlim_left, xlim_right = _xlim_from_bins(first_nonzero_index, num_bins)
 
-        var bins = List[Int]()
-        var start = starting
-        while start <= max_len:
-            bins.append(start)
-            start += interval
-
-        var x_categories = List[String]()
-        for i in range(len(bins)):
-            var min_value = bins[i]
-            var max_value = bins[i] + interval - 1
-            if max_value > max_len:
-                max_value = max_len
-            if interval == 1:
-                x_categories.append(String(min_value))
-            else:
-                x_categories.append(String(min_value) + "-" + String(max_value))
-
-        var arr = tensor_to_numpy_1d(self._cache_length_vector)
-        var arr2 = np.insert(arr, 0, 0)
-        var arr3 = np.append(arr2, 0)
-        arr3, _ = bin_array(arr3, bins, func="sum")
-
-        var ticks = Python.list()
-        var labels = Python.list()
-        for i in range(len(x_categories)):
-            ticks.append(i)
-            labels.append(x_categories[i])
-
-        var xlim_left = Int(py=np.argmax(arr3 > 0)) - 1
-        var xlim_right = len(arr3)
-
-        self._cache_binned_arr = arr3
+        self._cache_binned_arr = binned_arr
         self._cache_ticks = ticks
         self._cache_labels = labels
         self._cache_xlim_left = xlim_left
@@ -142,25 +108,20 @@ struct LengthSummarizer(Summarizer, PlotOutput, Copyable, Movable):
         self._cache_status = self._get_status()
         self._cache_ready = True
 
-    fn get_size_distribution(
+    fn get_size_distribution_(
         self, min_val: Int, max_val: Int
     ) -> Tuple[Int, Int]:
         # We won't group if they've asked us not to
-        # if max_val <= min_val:
-        #     return (min_val, 1)
-
         var base = 1
-
         while base > (max_val - min_val):
             base //= 10
-
         var divisions: List[Int] = [1, 2, 5]
 
         while True:
             for d in divisions:
                 var tester = base * d
                 if (max_val - min_val) / tester <= 50:
-                    var interval = tester
+                    interval = tester
                     break
             else:
                 base *= 10
@@ -177,7 +138,7 @@ struct LengthSummarizer(Summarizer, PlotOutput, Copyable, Movable):
     fn grade(self) -> GradeEntry:
         return GradeEntry("Sequence Length Distribution", self._cache_status)
 
-    fn data_block_body(self) -> String:
+    fn data_block_body_(self) -> String:
         """Module-specific lines (header + data)."""
         var out = "#Length\tCount\n"
         for i in range(len(self._cache_length_vector)):
@@ -185,10 +146,10 @@ struct LengthSummarizer(Summarizer, PlotOutput, Copyable, Movable):
                 out += "{}\t{}\n".format(i + 1, self._cache_length_vector[i])
         return out
 
-    fn module_legend(self) -> String:
+    fn module_legend_(self) -> String:
         return "Sequence Length Distribution"
 
-    fn panel_id(self) -> String:
+    fn panel_id_(self) -> String:
         return "seq_len_dis"
 
     fn plot_result(self) raises -> PythonObject:
@@ -196,18 +157,6 @@ struct LengthSummarizer(Summarizer, PlotOutput, Copyable, Movable):
         var plt = Python.import_module("matplotlib.pyplot")
         var np = Python.import_module("numpy")
         var mtp = Python.import_module("matplotlib")
-
-        if not self._cache_ready:
-            # Fallback: compute a simple plot from raw cached lengths.
-            var fig_info = plt.subplots()
-            var fig = fig_info[0]
-            var ax = fig_info[1]
-            var arr = tensor_to_numpy_1d(self._cache_length_vector)
-            ax.plot(arr)
-            ax.set_title("Distribution of sequence lengths over all sequences")
-            ax.set_xlabel("Sequence Length (bp)")
-            ax.set_ylabel("Number of Reads")
-            return fig
 
         var x = plt.subplots()
         var fig = x[0]
@@ -241,8 +190,8 @@ struct LengthSummarizer(Summarizer, PlotOutput, Copyable, Movable):
 
 # ----- Assembled module: Collector + Summarizer + DefaultOutputter -----
 
-struct LengthModule(Collector, Summarizer, FastqcDataOutput, FastqcHtmlOutput, Copyable, Movable):
-    """Module assembled from LengthCollector + LengthSummarizer; uses DefaultOutputter for text/HTML."""
+struct LengthModule(FastqcDataOutput, FastqcHtmlOutput, Copyable, Movable):
+    """Module assembling LengthCollector + LengthSummarizer; exposes only data/text/HTML helpers."""
     var collector: LengthCollector
     var summarizer: LengthSummarizer
 
@@ -250,41 +199,20 @@ struct LengthModule(Collector, Summarizer, FastqcDataOutput, FastqcHtmlOutput, C
         self.collector = LengthCollector()
         self.summarizer = LengthSummarizer()
 
-    fn tally_read(mut self, record: FastqRecord):
-        self.collector.tally_read(record)
-
-    fn tally_read(mut self, record: RefRecord):
-        self.collector.tally_read(record)
-
-    fn summerize(mut self, ctx: SummaryContext) raises:
-        self.summarizer.feed(self.collector)
-        self.summarizer.summerize(ctx)
-
-    fn grade(self) raises -> GradeEntry:
-        return self.summarizer.grade()
-
-    fn grades(self) raises -> List[GradeEntry]:
-        var out = List[GradeEntry]()
-        out.append(self.summarizer.grade())
-        return out^
-
     fn to_data_text(self, ctx: SummaryContext) raises -> String:
         """FastQC-style data block text for this module."""
-        var body = self.summarizer.data_block_body()
+        var body = self.summarizer.data_block_body_()
         var g = self.summarizer.grade()
         var out = DefaultOutputter()
-        return out.wrap_data_block(self.summarizer.module_legend(), g.grade, body)
-
-    fn plot_result(self) raises -> PythonObject:
-        return self.summarizer.plot_result()
+        return out.wrap_data_block(self.summarizer.module_legend_(), g.grade, body)
 
     fn to_html(self) raises -> result_panel:
         var fig = self.summarizer.plot_result()
         var out = DefaultOutputter()
         return out.make_panel(
-            self.summarizer.panel_id(),
+            self.summarizer.panel_id_(),
             self.summarizer.grade().grade,
-            self.summarizer.module_legend(),
+            self.summarizer.module_legend_(),
             fig,
         )
 
@@ -292,4 +220,88 @@ struct LengthModule(Collector, Summarizer, FastqcDataOutput, FastqcHtmlOutput, C
         var panels = List[result_panel]()
         panels.append(self.to_html())
         return panels^
+
+
+
+# ----- Helper functions for length summarization -----
+
+fn _min_max_lengths_from_vector(length_vector: List[Int64]) -> Tuple[Int, Int]:
+    """Return (min_len, max_len) for the cached length vector (1-based min, exclusive max)."""
+    var min_len: Int = 0
+    var max_len: Int = len(length_vector)
+    for i in range(len(length_vector)):
+        if length_vector[i] > 0:
+            min_len = i + 1
+            break
+    if min_len > 0:
+        min_len -= 1
+    max_len += 1
+    return min_len, max_len
+
+fn _build_bins(starting: Int, interval: Int, max_len: Int) -> List[Int]:
+    """Build list of bin start values from starting up to max_len."""
+    var bins = List[Int]()
+    var start = starting
+    while start <= max_len:
+        bins.append(start)
+        start += interval
+    return bins^
+
+fn _build_x_categories(
+    bins: List[Int], interval: Int, max_len: Int
+) -> List[String]:
+    """Build display labels for each bin (e.g. '1' or '1-10')."""
+    var x_categories = List[String]()
+    for i in range(len(bins)):
+        var min_value = bins[i]
+        var max_value = bins[i] + interval - 1
+        if max_value > max_len:
+            max_value = max_len
+        if interval == 1:
+            x_categories.append(String(min_value))
+        else:
+            x_categories.append(String(min_value) + "-" + String(max_value))
+    return x_categories^
+
+fn _bin_length_counts(
+    length_vector: List[Int64], bins: List[Int]
+) raises -> PythonObject:
+    """Pad length counts with zeros and bin them; returns binned numpy array."""
+    var padded = List[Int64](capacity=len(length_vector) + 2)
+    padded.append(0)
+    for i in range(len(length_vector)):
+        padded.append(length_vector[i])
+    padded.append(0)
+    var arr_np = tensor_to_numpy_1d(padded)
+    var binned_arr, _ = bin_array(arr_np, bins, func="sum")
+    return binned_arr
+
+fn _build_ticks_and_labels(
+    x_categories: List[String]
+) raises -> Tuple[PythonObject, PythonObject]:
+    """Build Python lists of tick indices and category labels for the plot."""
+    var ticks = Python.list()
+    var labels = Python.list()
+    for i in range(len(x_categories)):
+        ticks.append(i)
+        labels.append(x_categories[i])
+    return ticks, labels
+
+fn _first_nonzero_bin_index(
+    binned_arr: PythonObject, num_bins: Int
+) raises -> Int:
+    """Index of the first bin with count > 0, or -1 if none."""
+    for i in range(num_bins):
+        var bin_value = Int64(py=binned_arr.item(i))
+        if bin_value > 0:
+            return i
+    return -1
+
+fn _xlim_from_bins(
+    first_nonzero_index: Int, num_bins: Int
+) -> Tuple[Int, Int]:
+    """Return (xlim_left, xlim_right) for the plot from first nonzero bin and num_bins."""
+    var xlim_left = first_nonzero_index - 1
+    var xlim_right = num_bins
+    return xlim_left, xlim_right
 

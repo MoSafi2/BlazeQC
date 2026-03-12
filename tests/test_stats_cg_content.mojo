@@ -35,7 +35,7 @@ def test_cg_content_tally_100_percent_gc():
     # "CCGG": all four bases are C or G → GC% = 100
     var cg = CGModule()
     var rec = FastqRecord("r1", "CCGG", "IIII")
-    cg.tally_read(rec)
+    cg.collector.tally_read(rec)
     assert_equal(cg.collector.cg_content[100], 1)
     assert_equal(cg.collector.cg_content[0], 0)
 
@@ -44,7 +44,7 @@ def test_cg_content_tally_0_percent_gc():
     # "AATT": no C or G → GC% = 0
     var cg = CGModule()
     var rec = FastqRecord("r1", "AATT", "IIII")
-    cg.tally_read(rec)
+    cg.collector.tally_read(rec)
     assert_equal(cg.collector.cg_content[0], 1)
     assert_equal(cg.collector.cg_content[100], 0)
 
@@ -53,7 +53,7 @@ def test_cg_content_tally_50_percent_gc():
     # "ACGT": C and G out of 4 → 50%
     var cg = CGModule()
     var rec = FastqRecord("r1", "ACGT", "IIII")
-    cg.tally_read(rec)
+    cg.collector.tally_read(rec)
     assert_equal(cg.collector.cg_content[50], 1)
 
 
@@ -61,7 +61,7 @@ def test_cg_content_tally_25_percent_gc():
     # "ACAA": one G/C out of 4 → 25%
     var cg = CGModule()
     var rec = FastqRecord("r1", "ACAA", "IIII")
-    cg.tally_read(rec)
+    cg.collector.tally_read(rec)
     assert_equal(cg.collector.cg_content[25], 1)
 
 
@@ -69,7 +69,7 @@ def test_cg_content_tally_empty_record_no_change():
     # Empty sequence → early return, cg_content unchanged
     var cg = CGModule()
     var rec = FastqRecord("r1", "", "")
-    cg.tally_read(rec)
+    cg.collector.tally_read(rec)
     for i in range(101):
         assert_equal(cg.collector.cg_content[i], 0)
 
@@ -79,9 +79,9 @@ def test_cg_content_tally_accumulates_across_reads():
     var rec1 = FastqRecord("r1", "CCGG", "IIII")  # 100%
     var rec2 = FastqRecord("r2", "CCGG", "IIII")  # 100%
     var rec3 = FastqRecord("r3", "AATT", "IIII")  # 0%
-    cg.tally_read(rec1)
-    cg.tally_read(rec2)
-    cg.tally_read(rec3)
+    cg.collector.tally_read(rec1)
+    cg.collector.tally_read(rec2)
+    cg.collector.tally_read(rec3)
     assert_equal(cg.collector.cg_content[100], 2)
     assert_equal(cg.collector.cg_content[0], 1)
 
@@ -90,7 +90,7 @@ def test_cg_content_tally_single_base_c():
     # Single 'C' → 100% GC
     var cg = CGModule()
     var rec = FastqRecord("r1", "C", "I")
-    cg.tally_read(rec)
+    cg.collector.tally_read(rec)
     assert_equal(cg.collector.cg_content[100], 1)
 
 
@@ -98,7 +98,7 @@ def test_cg_content_tally_single_base_a():
     # Single 'A' → 0% GC
     var cg = CGModule()
     var rec = FastqRecord("r1", "A", "I")
-    cg.tally_read(rec)
+    cg.collector.tally_read(rec)
     assert_equal(cg.collector.cg_content[0], 1)
 
 
@@ -109,9 +109,10 @@ def test_cg_content_status_returns_pass_warn_or_fail():
     var cg = CGModule()
     for _ in range(200):
         var rec = FastqRecord("r", "ACGTACGTACGT", "IIIIIIIIIIII")
-        cg.tally_read(rec)
-    cg.prepare(SummaryContext(200, 2400, ""))
-    var status = cg.grades()[0].grade
+        cg.collector.tally_read(rec)
+    cg.summarizer.feed(cg.collector)
+    cg.summarizer.summerize(SummaryContext(200, 2400, ""))
+    var status = cg.summarizer.grade().grade
     assert_true(status == "pass" or status == "warn" or status == "fail")
 
 
