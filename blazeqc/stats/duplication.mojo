@@ -361,26 +361,23 @@ struct DupModule(Copyable, Movable):
             "Overrepresented sequences", g_over.grade, body_over
         )
 
-    fn to_html_panels(self) raises -> List[result_panel]:
-        var panels = List[result_panel]()
+    fn to_html_panels(self, figures: List[PythonObject]) raises -> Dict[String, result_panel]:
         var out = DefaultOutputter()
-        var fig = self.summarizer_dup.plot_result()
-        panels.append(
-            out.make_panel(
-                self.summarizer_dup.panel_id(),
-                self.summarizer_dup.grade().grade,
-                self.summarizer_dup.module_legend(),
-                fig,
-            )
+        var panel_dup = out.make_panel(
+            self.summarizer_dup.panel_id(),
+            self.summarizer_dup.grade().grade,
+            self.summarizer_dup.module_legend(),
+            figures[0],
         )
         var table_html = self.summarizer_overrepr.table_html()
-        panels.append(
-            result_panel(
-                self.summarizer_overrepr.panel_id(),
-                self.summarizer_overrepr.grade().grade,
-                self.summarizer_overrepr.module_legend(),
-                table_html,
-                panel_type="table",
-            )
+        var panel_over = result_panel(
+            self.summarizer_overrepr.panel_id(),
+            self.summarizer_overrepr.grade().grade,
+            self.summarizer_overrepr.module_legend(),
+            table_html,
+            panel_type="table",
         )
-        return panels^
+        var d = Dict[String, result_panel]()
+        d[panel_dup.legand] = panel_dup^
+        d[panel_over.legand] = panel_over^
+        return d^

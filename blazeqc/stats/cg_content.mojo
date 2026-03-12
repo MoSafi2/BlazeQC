@@ -1,5 +1,6 @@
 """CG content: composable Collector, Summarizer (with plotting), assembled CGModule."""
 
+from collections.dict import Dict
 from collections.list import List
 from math import sqrt, exp, pi
 from python import Python, PythonObject
@@ -225,11 +226,18 @@ struct CGModule(FastqcDataOutput, FastqcHtmlOutput, ModuleReport, Copyable, Mova
             fig,
         )
 
-    fn to_html_panels(self) raises -> List[result_panel]:
-        """Return list of HTML panels (single GC content panel)."""
-        var panels = List[result_panel]()
-        panels.append(self.to_html())
-        return panels^
+    fn to_html_panels(self, figures: List[PythonObject]) raises -> Dict[String, result_panel]:
+        """Return dict of HTML panels keyed by module_legend (single GC content panel)."""
+        var out = DefaultOutputter()
+        var panel = out.make_panel(
+            self.summarizer.panel_id(),
+            self.summarizer.grade().grade,
+            self.summarizer.module_legend(),
+            figures[0],
+        )
+        var d = Dict[String, result_panel]()
+        d[panel.legand] = panel^
+        return d^
 
     fn plot_result(self) raises -> PythonObject:
         """Delegate to summarizer for plot; ModuleReport entry point."""

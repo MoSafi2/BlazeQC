@@ -1,6 +1,7 @@
 """Quality distribution: one collector, two summarizers, assembled QualityModule."""
 
 from python import Python, PythonObject
+from collections.dict import Dict
 from collections.list import List
 from blazeseq import FastqRecord, RefRecord
 from blazeqc.stats.traits import Collector, Summarizer, PlotOutput
@@ -455,26 +456,24 @@ struct QualityModule(Copyable, Movable):
             self.summarizer_seq.module_legend(), g_seq.grade, body_seq
         )
 
-    fn to_html_panels(self) raises -> List[result_panel]:
-        var panels = List[result_panel]()
+    fn to_html_panels(self, figures: List[PythonObject]) raises -> Dict[String, result_panel]:
         var out = DefaultOutputter()
-        var fig_base = self.summarizer_base.plot_result()
         var panel_base = out.make_panel(
             self.summarizer_base.panel_id(),
             self.summarizer_base.grade().grade,
             self.summarizer_base.module_legend(),
-            fig_base,
+            figures[0],
         )
-        panels.append(panel_base^)
-        var fig_seq = self.summarizer_seq.plot_result()
         var panel_seq = out.make_panel(
             self.summarizer_seq.panel_id(),
             self.summarizer_seq.grade().grade,
             self.summarizer_seq.module_legend(),
-            fig_seq,
+            figures[1],
         )
-        panels.append(panel_seq^)
-        return panels^
+        var d = Dict[String, result_panel]()
+        d[panel_base.legand] = panel_base^
+        d[panel_seq.legand] = panel_seq^
+        return d^
 
     fn plot(self) raises -> Tuple[PythonObject, PythonObject]:
         return Tuple(

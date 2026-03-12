@@ -225,40 +225,51 @@ struct FullStats(Copyable):
         var base_stats = self.make_base_stats()
         panels[base_stats.legand] = base_stats^
 
-        var qu_panels = self.qu_dist.to_html_panels()
-        for i in range(len(qu_panels)):
-            var panel = qu_panels[i].copy()
-            panels[panel.legand] = panel^
+        var qu_figs = self.qu_dist.plot()
+        var qu_fig_list = List[PythonObject]()
+        qu_fig_list.append(qu_figs[0])
+        qu_fig_list.append(qu_figs[1])
+        var qu_panels = self.qu_dist.to_html_panels(qu_fig_list)
+        for entry in qu_panels.items():
+            panels[entry.key] = entry.value.copy()
 
-        var tile_panels = self.tile_qual.to_html_panels()
-        for i in range(len(tile_panels)):
-            var panel = tile_panels[i].copy()
-            panels[panel.legand] = panel^
+        var tile_fig_list = List[PythonObject]()
+        tile_fig_list.append(self.tile_qual.plot_result())
+        var tile_panels = self.tile_qual.to_html_panels(tile_fig_list)
+        for entry in tile_panels.items():
+            panels[entry.key] = entry.value.copy()
 
-        var bp_panels = self.bp_dist.to_html_panels()
-        for i in range(len(bp_panels)):
-            var panel = bp_panels[i].copy()
-            panels[panel.legand] = panel^
+        var (bp_fig_n, bp_fig_seq) = self.bp_dist.plot_result()
+        var bp_fig_list = List[PythonObject]()
+        bp_fig_list.append(bp_fig_n)
+        bp_fig_list.append(bp_fig_seq)
+        var bp_panels = self.bp_dist.to_html_panels(bp_fig_list)
+        for entry in bp_panels.items():
+            panels[entry.key] = entry.value.copy()
 
-        var cg_panels = self.cg_content.to_html_panels()
-        for i in range(len(cg_panels)):
-            var panel = cg_panels[i].copy()
-            panels[panel.legand] = panel^
+        var cg_fig_list = List[PythonObject]()
+        cg_fig_list.append(self.cg_content.plot_result())
+        var cg_panels = self.cg_content.to_html_panels(cg_fig_list)
+        for entry in cg_panels.items():
+            panels[entry.key] = entry.value.copy()
 
-        var len_panels = self.len_dist.to_html_panels()
-        for i in range(len(len_panels)):
-            var panel = len_panels[i].copy()
-            panels[panel.legand] = panel^
+        var len_fig_list = List[PythonObject]()
+        len_fig_list.append(self.len_dist.plot_result())
+        var len_panels = self.len_dist.to_html_panels(len_fig_list)
+        for entry in len_panels.items():
+            panels[entry.key] = entry.value.copy()
 
-        var dup_panels = self.dup_reads.to_html_panels()
-        for i in range(len(dup_panels)):
-            var panel = dup_panels[i].copy()
-            panels[panel.legand] = panel^
+        var dup_fig_list = List[PythonObject]()
+        dup_fig_list.append(self.dup_reads.summarizer_dup.plot_result())
+        var dup_panels = self.dup_reads.to_html_panels(dup_fig_list)
+        for entry in dup_panels.items():
+            panels[entry.key] = entry.value.copy()
 
-        var adapter_panels = self.adpt_cont.to_html_panels()
-        for i in range(len(adapter_panels)):
-            var panel = adapter_panels[i].copy()
-            panels[panel.legand] = panel^
+        var adapter_fig_list = List[PythonObject]()
+        adapter_fig_list.append(self.adpt_cont.plot(self.num_reads))
+        var adapter_panels = self.adpt_cont.to_html_panels(adapter_fig_list)
+        for entry in adapter_panels.items():
+            panels[entry.key] = entry.value.copy()
 
         return panels^
 

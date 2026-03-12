@@ -448,19 +448,17 @@ struct TileQualityModule(Copyable, Movable):
             self.summarizer.module_legend(), g.grade, body
         )
 
-    fn to_html_panels(self) raises -> List[result_panel]:
-        var panels = List[result_panel]()
+    fn to_html_panels(self, figures: List[PythonObject]) raises -> Dict[String, result_panel]:
         var out = DefaultOutputter()
-        var fig = self.summarizer.plot_result()
-        panels.append(
-            out.make_panel(
-                self.summarizer.panel_id(),
-                self.summarizer.grade().grade,
-                self.summarizer.module_legend(),
-                fig,
-            )
+        var panel = out.make_panel(
+            self.summarizer.panel_id(),
+            self.summarizer.grade().grade,
+            self.summarizer.module_legend(),
+            figures[0],
         )
-        return panels^
+        var d = Dict[String, result_panel]()
+        d[panel.legand] = panel^
+        return d^
 
     fn plot_result(self) raises -> PythonObject:
         return self.summarizer.plot_result()

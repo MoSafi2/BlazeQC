@@ -1,5 +1,6 @@
 """Stats traits: summarization and output interfaces (separate from collection implementations)."""
 
+from collections.dict import Dict
 from collections.list import List
 from python import PythonObject
 from blazeqc.html_maker import result_panel
@@ -45,12 +46,12 @@ trait PlotOutput(Copyable):
 
 
 trait FastqcHtmlOutput(Copyable):
-    """Output: result_panel for HTML report."""
+    """Output: result_panel for HTML report. Caller calls plot_result() and passes figures to to_html_panels."""
     fn to_html(self) raises -> result_panel:
         ...
 
-    fn to_html_panels(self) raises -> List[result_panel]:
-        """Single entry point for HTML; multi-panel modules return multiple panels."""
+    fn to_html_panels(self, figures: List[PythonObject]) raises -> Dict[String, result_panel]:
+        """Build panels from pre-computed figures; returns dict keyed by module_legend."""
         ...
 
 

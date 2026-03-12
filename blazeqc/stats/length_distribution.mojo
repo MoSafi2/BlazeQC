@@ -1,6 +1,7 @@
 """Length distribution (split from stats_.mojo)."""
 
 from python import Python, PythonObject
+from collections.dict import Dict
 from collections.list import List
 from blazeseq import FastqRecord, RefRecord
 from blazeqc.stats.traits import (
@@ -218,10 +219,17 @@ struct LengthModule(FastqcDataOutput, FastqcHtmlOutput, ModuleReport, Copyable, 
             fig,
         )
 
-    fn to_html_panels(self) raises -> List[result_panel]:
-        var panels = List[result_panel]()
-        panels.append(self.to_html())
-        return panels^
+    fn to_html_panels(self, figures: List[PythonObject]) raises -> Dict[String, result_panel]:
+        var out = DefaultOutputter()
+        var panel = out.make_panel(
+            self.summarizer.panel_id(),
+            self.summarizer.grade().grade,
+            self.summarizer.module_legend(),
+            figures[0],
+        )
+        var d = Dict[String, result_panel]()
+        d[panel.legand] = panel^
+        return d^
 
     fn plot_result(self) raises -> PythonObject:
         """Delegate to summarizer for plot; ModuleReport entry point."""

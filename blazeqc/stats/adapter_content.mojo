@@ -2,6 +2,7 @@
 
 from utils import Index
 from python import Python, PythonObject
+from collections.dict import Dict
 from collections.list import List
 from blazeqc.stats.traits import Collector, Summarizer, PlotOutput
 from blazeqc.stats.summary_utils import SummaryContext, GradeEntry, DefaultOutputter
@@ -243,18 +244,17 @@ struct AdapterContentModule[bits: Int = 3](Copyable, Movable):
         var g = self.summarizer.grade()
         return out.wrap_data_block(self.summarizer.module_legend(), g.grade, body)
 
-    fn to_html_panels(self) raises -> List[result_panel]:
-        var panels = List[result_panel]()
+    fn to_html_panels(self, figures: List[PythonObject]) raises -> Dict[String, result_panel]:
         var out = DefaultOutputter()
-        var fig = self.summarizer.plot_result()
         var panel = out.make_panel(
             self.summarizer.panel_id(),
             self.summarizer.grade().grade,
             self.summarizer.module_legend(),
-            fig,
+            figures[0],
         )
-        panels.append(panel^)
-        return panels^
+        var d = Dict[String, result_panel]()
+        d[panel.legand] = panel^
+        return d^
 
     fn plot(self, total_reads: Int64) raises -> PythonObject:
         """Legacy: plot from summarizer cache. Call feed + summerize(ctx) first."""

@@ -1,5 +1,6 @@
 """Base pair distribution: Collector + two Summarizers (N content, Sequence content) + BasepairModule."""
 
+from collections.dict import Dict
 from collections.list import List
 from python import Python, PythonObject
 from blazeseq import FastqRecord, RefRecord
@@ -392,28 +393,24 @@ struct BasepairModule(FastqcDataOutput, FastqcHtmlOutput, Copyable, Movable):
             self.summarizer_n.module_legend(), g_n.grade, body_n
         )
 
-    fn to_html_panels(self) raises -> List[result_panel]:
-        var panels = List[result_panel]()
+    fn to_html_panels(self, figures: List[PythonObject]) raises -> Dict[String, result_panel]:
         var out = DefaultOutputter()
-        var fig_seq = self.summarizer_seq.plot_result()
-        panels.append(
-            out.make_panel(
-                self.summarizer_seq.panel_id(),
-                self.summarizer_seq.grade().grade,
-                self.summarizer_seq.module_legend(),
-                fig_seq,
-            )
+        var panel_seq = out.make_panel(
+            self.summarizer_seq.panel_id(),
+            self.summarizer_seq.grade().grade,
+            self.summarizer_seq.module_legend(),
+            figures[1],
         )
-        var fig_n = self.summarizer_n.plot_result()
-        panels.append(
-            out.make_panel(
-                self.summarizer_n.panel_id(),
-                self.summarizer_n.grade().grade,
-                self.summarizer_n.module_legend(),
-                fig_n,
-            )
+        var panel_n = out.make_panel(
+            self.summarizer_n.panel_id(),
+            self.summarizer_n.grade().grade,
+            self.summarizer_n.module_legend(),
+            figures[0],
         )
-        return panels^
+        var d = Dict[String, result_panel]()
+        d[panel_seq.legand] = panel_seq^
+        d[panel_n.legand] = panel_n^
+        return d^
 
     fn plot_result(self) raises -> Tuple[PythonObject, PythonObject]:
         """Return (N figure, sequence content figure) for legacy plot() API."""
