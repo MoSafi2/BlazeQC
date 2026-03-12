@@ -9,7 +9,7 @@ comptime py_lib: String = "./.pixi/envs/default/lib/python3.12/site-packages/"
 # 2D matrix backed by a flat heap buffer (row-major).
 # Generic over DType — use DType.int64 for count accumulators and
 # DType.float64 for floating-point matrices (e.g. tile quality deviations).
-struct Matrix2D[dtype: DType](Copyable, Movable):
+struct Matrix2D[dtype: DType](Copyable, Movable, ImplicitlyCopyable):
     var data: UnsafePointer[Scalar[Self.dtype], MutExternalOrigin]
     var rows: Int
     var cols: Int

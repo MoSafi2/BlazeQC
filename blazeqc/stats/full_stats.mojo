@@ -9,7 +9,7 @@ from blazeqc.stats.basepair_distribution import BasepairDistribution
 from blazeqc.stats.cg_content import CGModule
 from blazeqc.stats.duplication import DupReads
 from blazeqc.stats.length_distribution import LengthModule
-from blazeqc.stats.quality_distribution import QualityDistribution
+from blazeqc.stats.quality_distribution import QualityModule
 from blazeqc.stats.tile_quality import PerTileQuality
 from blazeqc.stats.adapter_content import AdapterContent
 from blazeqc.config import hash_list
@@ -30,7 +30,7 @@ struct FullStats(Copyable):
     var total_bases: Int64
     var bp_dist: BasepairDistribution
     var len_dist: LengthModule
-    var qu_dist: QualityDistribution
+    var qu_dist: QualityModule
     var cg_content: CGModule
     var dup_reads: DupReads
     var tile_qual: PerTileQuality
@@ -42,7 +42,7 @@ struct FullStats(Copyable):
         self.len_dist = LengthModule()
         self.bp_dist = BasepairDistribution()
         self.cg_content = CGModule()
-        self.qu_dist = QualityDistribution()
+        self.qu_dist = QualityModule()
         self.dup_reads = DupReads()
         self.tile_qual = PerTileQuality()
         self.adpt_cont = AdapterContent[bits=3](hash_list(), 12)
@@ -55,7 +55,7 @@ struct FullStats(Copyable):
         self.len_dist.collector.tally_read(record)
         self.cg_content.collector.tally_read(record)  # Almost Free
         self.dup_reads.tally_read(record)
-        self.qu_dist.tally_read(record)
+        self.qu_dist.collector.tally_read(record)
         self.adpt_cont.tally_read(record, self.num_reads)
         self.tile_qual.tally_read(record)
 
@@ -67,7 +67,7 @@ struct FullStats(Copyable):
         self.len_dist.collector.tally_read(record)
         self.cg_content.collector.tally_read(record)
         self.dup_reads.tally_read(record)
-        self.qu_dist.tally_read(record)
+        self.qu_dist.collector.tally_read(record)
         self.adpt_cont.tally_read(record, self.num_reads)
         self.tile_qual.tally_read(record)
 
@@ -161,7 +161,10 @@ struct FullStats(Copyable):
     fn prepare_data(mut self, file_name: String) raises:
         """Fill all module caches. Call before write_data and build_panels."""
         var ctx = SummaryContext(self.num_reads, self.total_bases, file_name)
-        self.qu_dist.prepare_data()
+        self.qu_dist.summarizer_base.feed(self.qu_dist.collector)
+        self.qu_dist.summarizer_seq.feed(self.qu_dist.collector)
+        self.qu_dist.summarizer_base.summerize(ctx)
+        self.qu_dist.summarizer_seq.summerize(ctx)
         self.tile_qual.prepare_data()
         self.bp_dist.prepare_data(self.num_reads)
         self.cg_content.summarizer.feed(self.cg_content.collector)
@@ -209,7 +212,7 @@ struct FullStats(Copyable):
 
             # Module blocks in panel order (each returns its block text)
             var ctx = SummaryContext(self.num_reads, self.total_bases, file_name)
-            f.write(self.qu_dist.get_module_data())
+            f.write(self.qu_dist.to_data_text(ctx))
             f.write(self.tile_qual.get_module_data())
             f.write(self.bp_dist.get_module_data(self.num_reads))
             f.write(self.cg_content.to_data_text(ctx))
@@ -222,11 +225,10 @@ struct FullStats(Copyable):
         var base_stats = self.make_base_stats()
         panels[base_stats.legand] = base_stats^
 
-        var qu_html = self.qu_dist.make_html()
-        var per_base_quality_panel = qu_html[0].copy()
-        var per_sequence_quality_panel = qu_html[1].copy()
-        panels[per_sequence_quality_panel.legand] = per_sequence_quality_panel^
-        panels[per_base_quality_panel.legand] = per_base_quality_panel^
+        var qu_panels = self.qu_dist.to_html_panels()
+        for i in range(len(qu_panels)):
+            var panel = qu_panels[i].copy()
+            panels[panel.legand] = panel^
 
         var tile_quality = self.tile_qual.make_html()
         panels[tile_quality.legand] = tile_quality^

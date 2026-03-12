@@ -25,7 +25,7 @@ trait Summarizer(Copyable, PlotOutput):
     fn grade(self) raises -> GradeEntry:
         ...
 
-    fn data_block_body(self) -> String:
+    fn data_block_body(self) raises -> String:
         """Raw data lines (header + rows) for the data file block."""
         ...
 
