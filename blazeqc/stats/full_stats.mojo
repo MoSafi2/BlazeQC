@@ -19,9 +19,11 @@ from blazeqc.html_maker import (
     html_template,
     format_length,
 )
+from blazeqc.stats.cg_content import CGCollector, CGSummarizer
 
 # ----- Report data (FastQC-style data file) -----
 # FullStats.write_data(file_name) writes ##BlazeQC, basic stats, then each module's write_module_data(f).
+
 
 @fieldwise_init
 struct FullStats(Copyable):

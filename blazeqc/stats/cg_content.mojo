@@ -213,13 +213,10 @@ struct CGModule(Collector, Summarizer, FastqcDataOutput, FastqcHtmlOutput, Copya
     fn tally_read(mut self, record: RefRecord):
         self.collector.tally_read(record)
 
-    fn prepare(mut self, ctx: SummaryContext) raises:
-        self.summarizer.feed(self.collector)
-        self.summarizer.summerize(ctx)
-
     fn summerize(mut self, ctx: SummaryContext) raises:
         """Trait-compatible alias for prepare(ctx)."""
-        self.prepare(ctx)
+        self.summarizer.feed(self.collector)
+        self.summarizer.summerize(ctx)
 
     fn grade(self) raises -> GradeEntry:
         return self.summarizer.grade()
