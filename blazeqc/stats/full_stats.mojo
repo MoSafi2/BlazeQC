@@ -11,7 +11,7 @@ from blazeqc.stats.duplication import DupReads
 from blazeqc.stats.length_distribution import LengthModule
 from blazeqc.stats.quality_distribution import QualityModule
 from blazeqc.stats.tile_quality import PerTileQuality
-from blazeqc.stats.adapter_content import AdapterContent
+from blazeqc.stats.adapter_content import AdapterContentModule
 from blazeqc.config import hash_list
 from blazeqc.html_maker import (
     result_panel,
@@ -34,7 +34,7 @@ struct FullStats(Copyable):
     var cg_content: CGModule
     var dup_reads: DupReads
     var tile_qual: PerTileQuality
-    var adpt_cont: AdapterContent[3]
+    var adpt_cont: AdapterContentModule[3]
 
     fn __init__(out self) raises:
         self.num_reads = 0
@@ -45,7 +45,7 @@ struct FullStats(Copyable):
         self.qu_dist = QualityModule()
         self.dup_reads = DupReads()
         self.tile_qual = PerTileQuality()
-        self.adpt_cont = AdapterContent[bits=3](hash_list(), 12)
+        self.adpt_cont = AdapterContentModule[bits=3](hash_list(), 12)
 
     @always_inline
     fn tally(mut self, record: FastqRecord):
@@ -172,7 +172,8 @@ struct FullStats(Copyable):
         self.len_dist.summarizer.feed_(self.len_dist.collector)
         self.len_dist.summarizer.summerize(ctx)
         self.dup_reads.prepare_data(Int(self.num_reads))
-        self.adpt_cont.prepare_data(self.num_reads)
+        self.adpt_cont.summarizer.feed(self.adpt_cont.collector)
+        self.adpt_cont.summarizer.summerize(ctx)
 
     fn write_data(mut self, file_name: String) raises:
         """Write FastQC-style data file. Calls prepare_data then writes each module block."""
@@ -218,7 +219,7 @@ struct FullStats(Copyable):
             f.write(self.cg_content.to_data_text(ctx))
             f.write(self.len_dist.to_data_text(ctx))
             f.write(self.dup_reads.get_module_data(Int(self.num_reads)))
-            f.write(self.adpt_cont.get_module_data(self.num_reads))
+            f.write(self.adpt_cont.to_data_text(ctx))
 
     fn build_panels(mut self) raises -> Dict[String, result_panel]:
         var panels = Dict[String, result_panel]()
@@ -255,8 +256,10 @@ struct FullStats(Copyable):
         panels[sequence_duplication_levels.legand] = sequence_duplication_levels^
         panels[overrepresented_sequences.legand] = overrepresented_sequences^
 
-        var adapter_content = self.adpt_cont.make_html(self.num_reads)
-        panels[adapter_content.legand] = adapter_content^
+        var adapter_panels = self.adpt_cont.to_html_panels()
+        for i in range(len(adapter_panels)):
+            var panel = adapter_panels[i].copy()
+            panels[panel.legand] = panel^
 
         return panels^
 
