@@ -4,7 +4,7 @@ from utils import Index
 from memory import Span
 from python import Python, PythonObject
 from blazeseq import FastqRecord, RefRecord
-from blazeqc.stats.analyser import Analyser
+from blazeqc.stats.traits import Collector
 from blazeqc.helpers import base2int, grow_tensor, Matrix2D, matrix_to_numpy
 
 

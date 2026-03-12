@@ -4,7 +4,42 @@ from collections.list import List
 from python import PythonObject
 from blazeqc.html_maker import result_panel
 from blazeqc.helpers import encode_img_b64
+from blazeseq import FastqRecord, RefRecord
 
+
+trait Collector(Copyable):
+    fn tally_read(mut self, record: FastqRecord):
+        ...
+
+    fn tally_read(mut self, record: RefRecord):
+        ...
+
+
+trait Summarizer(Copyable):
+    """Summarization: prepare derived data and expose grades (pass/warn/fail)."""
+    fn summerize(mut self, ctx: SummaryContext) raises:
+        ...
+
+    fn grade(self) raises -> GradeEntry:
+        ...
+
+
+trait TextOutput(Copyable):
+    """Output: FastQC-style data block text."""
+    fn to_data_text(self, ctx: SummaryContext) raises -> String:
+        ...
+
+
+trait PlotOutput(Copyable):
+    """Output: one or more plot figures (single-panel modules return list of length 1)."""
+    fn to_plot(self) raises -> PythonObject:
+        ...
+
+
+trait HtmlOutput(Copyable):
+    """Output: one or more result_panel for HTML report."""
+    fn to_html(self) raises -> result_panel:
+        ...
 
 struct SummaryContext(Copyable):
     """Context passed into prepare() and output methods (e.g. num_reads for modules that need it)."""
@@ -27,32 +62,6 @@ struct GradeEntry(Copyable):
         self.panel_legend = panel_legend
         self.grade = grade
 
-
-trait StatSummarizer(Copyable):
-    """Summarization: prepare derived data and expose grades (pass/warn/fail)."""
-    fn prepare(mut self, ctx: SummaryContext) raises:
-        ...
-
-    fn grades(self) raises -> List[GradeEntry]:
-        ...
-
-
-trait TextOutput(Copyable):
-    """Output: FastQC-style data block text."""
-    fn to_data_text(self, ctx: SummaryContext) raises -> String:
-        ...
-
-
-trait PlotOutput(Copyable):
-    """Output: one or more plot figures (single-panel modules return list of length 1)."""
-    fn to_plot(self) raises -> List[PythonObject]:
-        ...
-
-
-trait HtmlOutput(Copyable):
-    """Output: one or more result_panel for HTML report."""
-    fn to_html_panels(self) raises -> List[result_panel]:
-        ...
 
 
 struct DefaultOutputter(Copyable):

@@ -4,7 +4,6 @@ from collections.dict import Dict
 from collections.list import List
 from python import Python, PythonObject
 from blazeseq import FastqRecord, RefRecord
-from blazeqc.stats.analyser import Analyser
 from blazeqc.stats.traits import SummaryContext
 from blazeqc.stats.basepair_distribution import BasepairDistribution
 from blazeqc.stats.cg_content import CGContent

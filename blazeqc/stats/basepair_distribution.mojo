@@ -3,7 +3,7 @@ from collections.dict import Dict
 from collections.list import List
 from python import Python, PythonObject
 from blazeseq import FastqRecord, RefRecord
-from blazeqc.stats.analyser import Analyser
+from blazeqc.stats.traits import Collector
 from blazeqc.helpers import (
     Matrix2D,
     matrix_to_numpy,
@@ -16,7 +16,7 @@ from blazeqc.limits import N_CONTENT_WARN, N_CONTENT_ERROR, SEQUENCE_WARN, SEQUE
 
 
 @fieldwise_init
-struct BasepairDistribution(Analyser):
+struct BasepairDistribution(Collector):
     var bp_dist: Matrix2D[DType.int64]
     var max_length: Int
     var min_length: Int

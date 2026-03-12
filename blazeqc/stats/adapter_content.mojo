@@ -2,7 +2,7 @@
 
 from utils import Index
 from python import Python, PythonObject
-from blazeqc.stats.analyser import Analyser
+from blazeqc.stats.traits import Collector
 from blazeqc.helpers import (
     Matrix2D,
     matrix_to_numpy,
@@ -16,7 +16,7 @@ from blazeseq import FastqRecord, RefRecord
 # TODO: Also plot the Over-represented sequences.
 # TODO: Add binning
 @fieldwise_init
-struct AdapterContent[bits: Int = 3](Analyser, Copyable, Movable):
+struct AdapterContent[bits: Int = 3](Collector, Copyable, Movable):
     var kmer_len: Int
     var hash_counts: Matrix2D[DType.int64]
     var hash_list: List[UInt64]

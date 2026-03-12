@@ -4,14 +4,14 @@ from collections.dict import Dict
 from collections.list import List
 from python import Python, PythonObject
 from blazeseq import FastqRecord, RefRecord
-from blazeqc.stats.analyser import Analyser
+from blazeqc.stats.traits import Collector
 from blazeqc.stats.over_represented import OverRepresentedSequence
 from blazeqc.helpers import list_float64_to_numpy, encode_img_b64
 from blazeqc.html_maker import result_panel, _make_row, _make_table
 from blazeqc.limits import DUPLICATION_WARN, DUPLICATION_ERROR
 
 
-struct DupReads(Analyser, Copyable, Movable):
+struct DupReads(Collector, Copyable, Movable):
     var unique_dict: Dict[String, Int]
     var unique_reads: Int
     var count_at_max: Int

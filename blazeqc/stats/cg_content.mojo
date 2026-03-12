@@ -4,11 +4,11 @@ from collections.list import List
 from math import sqrt, exp, pi
 from python import Python, PythonObject
 from blazeseq import FastqRecord, RefRecord
-from blazeqc.stats.analyser import Analyser
 from blazeqc.stats.traits import (
+    Collector,
     SummaryContext,
     GradeEntry,
-    StatSummarizer,
+    Summarizer,
     TextOutput,
     PlotOutput,
     HtmlOutput,
@@ -21,7 +21,7 @@ from blazeqc.limits import GC_SEQUENCE_WARN, GC_SEQUENCE_ERROR
 
 # ----- Collector: tally only -----
 
-struct CGCollector(Analyser, Copyable, Movable):
+struct CGCollector(Collector, Copyable, Movable):
     """Collection only: raw cg_content counts. No prepare, grades, or output."""
     var cg_content: List[Int64]
 
@@ -65,7 +65,7 @@ struct CGCollector(Analyser, Copyable, Movable):
 
 # ----- Summarizer: prepare + grades + data for output + to_plot -----
 
-struct CGSummarizer(StatSummarizer, Copyable, Movable):
+struct CGSummarizer(Summarizer, Copyable, Movable):
     """Summarization and plotting in one struct. Feed collector then prepare(ctx)."""
     var _cache_theoretical: List[Float64]
     var _cache_cg_content: List[Int64]
@@ -219,7 +219,7 @@ struct CGSummarizer(StatSummarizer, Copyable, Movable):
 
 # ----- Assembled module: Collector + Summarizer + DefaultOutputter -----
 
-struct CGModule(Analyser, StatSummarizer, TextOutput, PlotOutput, HtmlOutput, Copyable, Movable):
+struct CGModule(Collector, Summarizer, TextOutput, PlotOutput, HtmlOutput, Copyable, Movable):
     """Module assembled from Collector + Summarizer; uses DefaultOutputter for text/HTML."""
     var collector: CGCollector
     var summarizer: CGSummarizer

@@ -2,12 +2,12 @@
 
 from python import Python, PythonObject
 from blazeseq import FastqRecord, RefRecord
-from blazeqc.stats.analyser import Analyser
+from blazeqc.stats.traits import Collector
 from blazeqc.helpers import tensor_to_numpy_1d, bin_array, encode_img_b64
 from blazeqc.html_maker import result_panel
 
 
-struct LengthDistribution(Analyser, Copyable, Movable):
+struct LengthDistribution(Collector, Copyable, Movable):
     var length_vector: List[Int64]
     var zero_length_count: Int
     var _cache_binned_arr: PythonObject

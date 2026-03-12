@@ -3,7 +3,7 @@
 from collections.dict import DictEntry, Dict, default_hasher
 from python import Python, PythonObject
 from blazeseq import FastqRecord, RefRecord
-from blazeqc.stats.analyser import Analyser
+from blazeqc.stats.traits import Collector
 from blazeqc.helpers import (
     Matrix2D,
     encode_img_b64,
@@ -37,7 +37,7 @@ struct TileQualityEntry(Copyable, Movable):
         self.count += other
 
 
-struct PerTileQuality(Analyser, Copyable, Movable):
+struct PerTileQuality(Collector, Copyable, Movable):
     var n: Int
     var map: Dict[Int, TileQualityEntry]
     var max_length: Int

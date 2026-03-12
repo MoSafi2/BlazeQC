@@ -2,7 +2,7 @@
 
 from python import Python, PythonObject
 from blazeseq import FastqRecord, RefRecord
-from blazeqc.stats.analyser import Analyser
+from blazeqc.stats.traits import Collector
 from blazeqc.helpers import (
     Matrix2D,
     matrix_to_numpy,
@@ -27,9 +27,7 @@ from blazeqc.limits import (
     QUALITY_SEQUENCE_WARN,
     QUALITY_SEQUENCE_ERROR,
 )
-
-
-struct QualityDistribution(Analyser, Copyable, Movable):
+struct QualityDistribution(Collector, Copyable, Movable):
     var qu_dist: Matrix2D[DType.int64]
     var qu_dist_seq: List[Int64]
     var max_length: Int
